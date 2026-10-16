@@ -304,6 +304,12 @@ export function generate(seed: number): World {
     const p = find((x, z, i) => cliffW[i] > 0.75 && h[i] > 4 && base[i] > 0.004 && base[i] < 0.03 && far(x, z, 50), 40000);
     if (p) landmarks.push({ kind: 'cave', x: p.x, z: p.z, rot: outward(p.x, p.z), r: 3 });
   }
+  for (const l of landmarks) if (l.kind === 'hotSpring') {
+    const R0 = l.r * 0.85;
+    for (let z = l.z - R0 | 0; z <= l.z + R0 + 1; z++) for (let x = l.x - R0 | 0; x <= l.x + R0 + 1; x++) {
+      const d = Math.hypot(x - l.x, z - l.z); if (d < R0) h[idx(x, z)] -= 0.7 * (1 - (d / R0) ** 2);
+    }
+  }
   for (const l of landmarks) if (l.kind !== 'cave' && l.kind !== 'wing') {
     for (let z = l.z - l.r - 3 | 0; z <= l.z + l.r + 3; z++) for (let x = l.x - l.r - 3 | 0; x <= l.x + l.r + 3; x++) if (inb(x, z) && Math.hypot(x - l.x, z - l.z) < l.r + 3) clear[idx(x, z)] = 1;
   }

@@ -33,12 +33,13 @@ export class WeatherFx {
         float b2(vec2 a){ a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
         float b4(vec2 a){ return b2(0.5 * a) * 0.25 + b2(a); }
         void main(){
-          float th = terrainH(vWorld.xz);
+          float th = max(terrainH(vWorld.xz), uTide + 0.4);
           float low = clamp((vWorld.y - th) / 3.0, 0.0, 1.0);
           float n = vn(vWorld.xz * 0.05 + vec2(uTime * 0.02, uTime * 0.011)) * 0.7 + vn(vWorld.xz * 0.13 - uTime * 0.03) * 0.3;
-          float a = uFog * low * smoothstep(0.42, 0.62, n) * 0.62;
-          if (b4(gl_FragCoord.xy) >= a) discard;
-          gl_FragColor = vec4(mix(vec3(0.92, 0.94, 0.98), vec3(0.45, 0.5, 0.65), uNight) * (0.6 + 0.4 * uAmbient), 1.0);
+          float a = uFog * low * smoothstep(0.3, 0.7, n) * 0.75;
+          a = floor(a * 5.0 + b4(gl_FragCoord.xy) * 0.5) / 5.0;   // banded, pixel-art haze
+          if (a <= 0.0) discard;
+          gl_FragColor = vec4(mix(vec3(0.95, 0.94, 0.9), vec3(0.45, 0.5, 0.65), uNight) * (0.55 + 0.45 * uAmbient), a);
         }`,
     });
     this.fog = new THREE.Mesh(new THREE.PlaneGeometry(260, 260).rotateX(-Math.PI / 2), this.fogMat);

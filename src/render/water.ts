@@ -33,7 +33,7 @@ void main(){
   else if (d < 4.5) c = vec3(0.16, 0.52, 0.74);
   else if (d < 9.0) c = vec3(0.12, 0.38, 0.62);
   else c = vec3(0.10, 0.30, 0.55);
-  if (bio > 11.5 && bio < 12.5) c = mix(c, vec3(0.38, 0.86, 0.84), 0.45);       // lagoon: brighter turquoise
+  if (bio > 11.5 && bio < 12.5) c = mix(vec3(0.24, 0.78, 0.8), vec3(0.42, 0.86, 0.8), step(0.55, vn(P.xz * 0.15) + (r - 0.5) * 0.1)); // lagoon: clear turquoise with sandy patches
   if ((bio > 10.5 && bio < 12.5) && r2 < 0.05 && d < 1.0) {                     // coral specks
     float k = h21(pc + 4.0); c = k < 0.33 ? vec3(0.95, 0.55, 0.55) : k < 0.66 ? vec3(0.98, 0.72, 0.4) : vec3(0.7, 0.55, 0.9);
   }
@@ -47,10 +47,10 @@ void main(){
   if (d > 2.5 && uWind > 0.6 && r < (uWind - 0.6) * 0.05) c = vec3(0.92, 0.96, 1.0);   // storm whitecaps
   // shoreline foam and incoming waves
   float lap = 0.07 + 0.05 * sin(uTime * 1.4 + P.x * 0.31 + P.z * 0.23);
-  if (d < lap && r < 0.92) c = vec3(0.95, 0.98, 1.0);
+  if (d < lap && r < 0.92 && bio < 11.5) c = vec3(0.95, 0.98, 1.0);
   float band = fract(uTime * 0.16 + vn(P.xz * 0.06) * 2.0);
   float wd = mix(1.1, 0.12, band);
-  if (abs(d - wd) < 0.035 + uWind * 0.02 && r < 0.5 + band * 0.5) c = mix(c, vec3(0.95, 0.98, 1.0), 0.5 + band * 0.5);
+  if (bio < 10.5 && d < 1.3 && abs(d - wd) < 0.035 + uWind * 0.02 && r < 0.3 + band * 0.5) c = mix(c, vec3(0.95, 0.98, 1.0), 0.35 + band * 0.5);
   if (bio > 10.5 && bio < 11.5 && r < 0.35 + 0.3 * sin(uTime * 2.0 + P.x * 0.5)) c = vec3(0.95, 0.98, 1.0); // breakers on reef
   // sun glints by day
   if (r > 0.996 - uWind * 0.004 && uNight < 0.5) c = vec3(1.0);

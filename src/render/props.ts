@@ -57,7 +57,12 @@ export function buildProps(w: World): PropsOut {
       case 'giantTree': at(l, giantTree, 0); break;
       case 'hotSpring': at(l, (k, l) => { for (let i = 0; i < 11; i++) { const a = (i / 11) * 6.28; k.rock(0.5 + hash(i, 1, 9) * 0.4, Math.cos(a) * l.r * 0.95, 0.1, Math.sin(a) * l.r * 0.95, MAT.rockD, i); } }); out.steam.push({ x: l.x, y: heightAt(w, l.x, l.z) + 0.2, z: l.z, rate: 3 }); break;
       case 'steamVent': at(l, (k) => { for (let i = 0; i < 5; i++) k.rock(0.4 + hash(i, 4, 9) * 0.5, (hash(i, 5, 9) - 0.5) * 1.6, 0.1, (hash(i, 6, 9) - 0.5) * 1.6, MAT.rockD, i + 20); }); out.steam.push({ x: l.x, y: heightAt(w, l.x, l.z) + 0.5, z: l.z, rate: 2 }); break;
-      case 'cave': at(l, cave, 0); break;
+      case 'cave': {
+        // walk outward from the cliff top to its foot, then set the mouth into the face
+        let x = l.x, z = l.z; const dx = Math.cos(l.rot), dz = Math.sin(l.rot);
+        for (let k = 0; k < 40 && heightAt(w, x, z) > 1.2; k++) { x += dx * 0.5; z += dz * 0.5; }
+        at({ ...l, x: x - dx * 1.2, z: z - dz * 1.2 }, cave, 0); break;
+      }
     }
   }
   return out;
