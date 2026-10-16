@@ -44,7 +44,17 @@ Open the game and explore a large, beautiful, living island. Watch a full day tu
   - **Flowers:** butterflies. **Swamp:** dragonflies. **Night:** fireflies, bats, an owl.
   - Animals react to people, and flee when someone gets close.
 - **Wind** moves trees, grass and palms. Clouds drift and cast **cloud shadows** across the land.
-- **Ambient sound** is generated in code (no audio files): waves, wind, birds by day, insects and frogs at night, rain and thunder. A mute toggle is included.
+- **Ambient sound is zoned**, generated in code with no audio files and no single looping soundtrack. What you hear depends on where the camera is and the time of day:
+  - **Beach:** waves (louder closer to shore) and gulls.
+  - **Jungle:** dense birdsong and insects by day; frogs and crickets at night.
+  - **Grassland:** lighter birds and grasshoppers, plus wind through grass.
+  - **Rivers and waterfalls:** a rush that grows as you approach.
+  - **Swamp:** frogs and buzzing.
+  - **Highlands and volcano:** wind, and a low rumble near the crater.
+  - **Hot springs:** bubbling.
+  - **Weather and night** layer on top: rain, thunder, gusts, crickets, an owl.
+
+  Sounds play as randomized events (individual chirps, croaks and gull cries), not fixed loops, and zones crossfade smoothly as you pan. A mute toggle is included.
 
 ## Time and weather
 - **Clock HUD** styled like the reference ("☀ DAY 1 – 06:00"). A day lasts about 12 real minutes at 1×. Speed controls: pause, 1×, 2×, 4×.
