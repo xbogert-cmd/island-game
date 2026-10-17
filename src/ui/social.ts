@@ -5,6 +5,7 @@ import { SECRET_LABEL, SKILL_LABEL, trustWord } from '../life/persona';
 import { PARTY_MAX } from '../life/group';
 import { dirName } from '../life/scouting';
 import { Input } from './input';
+import { objectives } from '../life/objectives';
 
 const CSS = `
 .so { position: absolute; font-family: 'Press Start 2P', monospace; color: #f4f1e6; z-index: 6; user-select: none; }
@@ -77,7 +78,11 @@ const CSS = `
 #goal .c h3 { font-size: 9px; color: #ffd65a; margin: 0 0 4px; font-weight: normal; }
 #goal .bar { width: 300px; height: 6px; background: #121a33; border: 2px solid #2b3766; border-radius: 4px; overflow: hidden; }
 #goal .bar i { display: block; height: 100%; background: #ffd65a; }
-#today { left: 14px; top: 160px; font-size: 8px; padding: 8px 12px; line-height: 1.9; display: none; }
+#today { left: 14px; top: 160px; font-size: 8px; padding: 8px 12px; line-height: 1.9; display: none; max-width: 300px; }
+#today .gh { color: #ffd65a; margin-top: 6px; }
+#today .ob { cursor: default; padding-left: 10px; text-indent: -10px; }
+#today .ob.at { cursor: pointer; } #today .ob.at:hover { color: #ffd65a; }
+#today .ob.done { color: #8af07a; }
 `;
 
 const MOOD_TXT: Record<string, string> = { none: '', happy: '😊', angry: '😠', worried: '😟', sad: '😢', scared: '😨', tired: '💤', fond: '❤', pain: '🤕' };
@@ -92,6 +97,7 @@ export class Social {
   private labels = new Map<string, HTMLElement>();
   private askEl: HTMLElement; private askKey = ''; private askOpen = false;
   private goalEl: HTMLElement; private goalKey = ''; private goalT = 0; private todayEl: HTMLElement;
+  private obKeys = new Map<string, string>(); private obDone: { text: string; t: number }[] = [];
   private cardP: Person | null = null; private cardKey = ''; private partyKey = ''; private rosterKey = '';
   private tipT = 0; private momentT = 0; private refreshT = 0; private journalN = -1;
   private toastQ: { el: HTMLElement; t: number }[] = [];
@@ -109,6 +115,11 @@ export class Social {
     this.askEl = this.el('<div class="ask so" style="display:none"></div>');
     this.goalEl = this.el('<div id="goal" class="so"></div>');
     this.todayEl = this.el('<div id="today" class="so box"></div>');
+    // clicking a goal with a place on it shows that place
+    this.todayEl.addEventListener('click', e => {
+      const o = (e.target as HTMLElement).closest('.ob.at') as HTMLElement | null; if (!o) return;
+      game.rig.jumpTo(Number(o.dataset.x), Number(o.dataset.z)); game.rig.followOn = false;
+    });
     this.lead.style.display = 'none';
     (this.lead.querySelector('.me') as HTMLElement).onclick = () => { game.camWho = null; game.rig.followOn = true; };
     this.lead.querySelectorAll('.btns button').forEach(b => (b as HTMLElement).onclick = () => this.toggle((b as HTMLElement).dataset.a === 'roster' ? this.roster : this.journal));
@@ -229,7 +240,15 @@ export class Social {
     (this.lead.querySelector('.sub') as HTMLElement).innerHTML = `Group: ${trustWord(S.avgTrust(L))}<br>${g.party.length}/${PARTY_MAX} with you`;
     const st = g.stock, n = g.people.length, cur = g.goals.cur;
     this.todayEl.style.display = 'block';
-    const tw = `${cur ? `TODAY: ${cur.title}<br>` : g.goals.opts.length ? 'TODAY: DECIDING...<br>' : ''}FOOD: ${st.word(st.totalFood, n)} · WATER: ${st.word(st.water, n)}${st.ration ? ' · HALF RATIONS' : ''}`;
+    // goals: what to do now; finished ones tick off for a few seconds
+    const obs = objectives(g), now = new Map(obs.map(o => [o.key, o.text]));
+    for (const [k, t] of this.obKeys) if (!now.has(k) && k !== 'ask' && k !== 'plan') this.obDone.push({ text: t, t: 5 });
+    this.obKeys = now;
+    this.obDone = this.obDone.filter(d => (d.t -= 0.5) > 0);
+    const esc = (t: string) => t.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
+    const obHtml = this.obDone.map(d => `<div class="ob done">✓ ${esc(d.text)}</div>`).join('') +
+      obs.map(o => o.x !== undefined ? `<div class="ob at" data-x="${o.x.toFixed(1)}" data-z="${o.z!.toFixed(1)}">› ${esc(o.text)} ⌖</div>` : `<div class="ob">› ${esc(o.text)}</div>`).join('');
+    const tw = `${cur ? `TODAY: ${cur.title}<br>` : g.goals.opts.length ? 'TODAY: DECIDING...<br>' : ''}FOOD: ${st.word(st.totalFood, n)} · WATER: ${st.word(st.water, n)}${st.ration ? ' · HALF RATIONS' : ''}<div class="gh">GOALS</div>${obHtml}`;
     if (this.todayEl.innerHTML !== tw) this.todayEl.innerHTML = tw;
     const party = this.lead.querySelector('.party') as HTMLElement;
     const list = [...g.party, ...g.people.filter(p => p.mode === 'rescued'), ...g.scouts];

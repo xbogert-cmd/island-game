@@ -5,6 +5,7 @@ import type { WeatherKind } from '../sim/weather';
 import type { Ambience } from '../audio/ambience';
 import { U } from '../render/shared';
 import { MAP } from '../life/discovery';
+import { ZOOMS } from '../render/camera';
 
 const CSS = `
 .hud { position: absolute; font-family: 'Press Start 2P', monospace; color: #f4f1e6; user-select: none; z-index: 5; }
@@ -18,11 +19,15 @@ const CSS = `
 #mini { top: 14px; right: 14px; border: 3px solid #2b3766; border-radius: 12px; background: #1c4672; box-shadow: 0 3px 0 #0007; cursor: pointer; overflow: hidden; line-height: 0; }
 #mini canvas { image-rendering: pixelated; width: 210px; height: 210px; }
 #gear { top: 240px; right: 14px; }
+#zoom { top: 116px; left: 222px; display: flex; gap: 6px; align-items: center; }
+#zoom button { font: 10px 'Press Start 2P', monospace; color: #f4f1e6; background: #121a33e6; border: 3px solid #2b3766; border-radius: 10px; padding: 8px 10px; cursor: pointer; }
+#zoom .dots { font-size: 10px; letter-spacing: 2px; text-shadow: 0 2px 0 #000; }
 #panel { top: 286px; right: 14px; width: 260px; display: none; flex-direction: column; gap: 12px; font-size: 10px; line-height: 1.6; background: #121a33f2; border: 3px solid #2b3766; border-radius: 14px; padding: 14px; }
 #panel.open { display: flex; }
 #panel label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 #panel input[type=text], #panel select { font: 10px 'Press Start 2P', monospace; background: #0b1020; color: #f4f1e6; border: 2px solid #2b3766; border-radius: 6px; padding: 6px; width: 110px; }
 #hint { bottom: 12px; right: 14px; font-size: 8px; opacity: 0.8; padding: 8px 12px; }
+@media (max-width: 1180px) { #hint { display: none; } }
 `;
 
 const BIOME_RGB: Record<number, number[]> = {
@@ -31,7 +36,7 @@ const BIOME_RGB: Record<number, number[]> = {
 };
 
 export class Hud {
-  private clockEl: HTMLElement; private wxEl: HTMLElement;
+  private clockEl: HTMLElement; private wxEl: HTMLElement; private zoomEl: HTMLElement;
   private mini: HTMLCanvasElement; private miniBase: ImageData; private miniDim: ImageData; private dimVer = -1; private dimT = 0;
   constructor(private game: Game, audio: Ambience) {
     const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
@@ -43,6 +48,10 @@ export class Hud {
       game.clock.speed = Number(b.dataset.s); speed.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
     }));
     addEventListener('keydown', e => { if (e.key === ' ' && (e.target as HTMLElement).tagName !== 'INPUT') { e.preventDefault(); (speed.querySelector(game.clock.speed ? '[data-s="0"]' : '[data-s="1"]') as HTMLButtonElement).click(); } });
+
+    // zoom: one click per level, so the middle view is always easy to get back to
+    this.zoomEl = el('<div id="zoom" class="hud"><button data-z="-1">−</button><span class="dots"></span><button data-z="1">+</button></div>');
+    this.zoomEl.querySelectorAll('button').forEach(b => b.addEventListener('click', () => game.rig.setZoom(game.rig.zoomI + Number((b as HTMLElement).dataset.z))));
 
     const miniWrap = el('<div id="mini" class="hud"><canvas width="192" height="192"></canvas></div>');
     this.mini = miniWrap.querySelector('canvas')!;
@@ -67,7 +76,7 @@ export class Hud {
 
     const gear = el('<button id="gear" class="hud btn">⚙ SETTINGS</button>');
     const panel = el(`<div id="panel" class="hud">
-      <label>Pixel filter <input id="o-filter" type="checkbox"></label>
+      <label>Outlines <input id="o-filter" type="checkbox"></label>
       <label>Texture grain <select id="o-grain"><option value="0">Smooth</option><option value="0.35">Soft</option><option value="0.65">Medium</option><option value="1">Classic</option></select></label>
       <label>Sound <input id="o-sound" type="checkbox" checked></label>
       <label>Weather <select id="o-wx"><option value="auto">Auto</option><option>clear</option><option>cloudy</option><option>rain</option><option>storm</option></select></label>
@@ -77,8 +86,8 @@ export class Hud {
     </div>`);
     gear.addEventListener('click', () => { panel.classList.toggle('open'); gear.classList.toggle('on'); });
     const filt = panel.querySelector('#o-filter') as HTMLInputElement;
-    filt.checked = localStorageGet('pixelFilter') === '1';
-    const applyFilter = () => { game.post.mat.uniforms.uFilter.value = filt.checked ? 1 : 0; localStorageSet('pixelFilter', filt.checked ? '1' : '0'); };
+    filt.checked = localStorageGet('outlines') !== '0';      // thin outlines: on unless turned off
+    const applyFilter = () => { game.post.mat.uniforms.uFilter.value = filt.checked ? 1 : 0; localStorageSet('outlines', filt.checked ? '1' : '0'); };
     filt.addEventListener('change', applyFilter); applyFilter();
     const grain = panel.querySelector('#o-grain') as HTMLSelectElement;
     grain.value = localStorageGet('grain3') ?? '1';
@@ -94,7 +103,7 @@ export class Hud {
     const go = (seed: string | number) => { location.search = `?seed=${seed}`; };
     panel.querySelector('#o-go')!.addEventListener('click', () => go((panel.querySelector('#o-seed') as HTMLInputElement).value || 1));
     panel.querySelector('#o-rand')!.addEventListener('click', () => go((Math.random() * 1e9) | 0));
-    el('<div id="hint" class="hud pill">CLICK: GO &nbsp; RIGHT-CLICK: WHISTLE &nbsp; DRAG: LOOK &nbsp; Q/E: TURN</div>');
+    el('<div id="hint" class="hud pill">CLICK: GO &nbsp; RIGHT-CLICK: WHISTLE &nbsp; DRAG: LOOK &nbsp; SCROLL: ZOOM &nbsp; Q/E: TURN</div>');
     document.querySelectorAll('.hud').forEach(e => e.addEventListener('pointerdown', (ev: Event) => ev.stopPropagation()));
   }
 
@@ -114,6 +123,8 @@ export class Hud {
   update() {
     const g = this.game, c = g.clock, wx = g.weather;
     const night = c.night > 0.5, h = c.hour;
+    const dots = ZOOMS.map((_, i) => i === g.rig.zoomI ? '●' : '○').join('');
+    const de = this.zoomEl.querySelector('.dots') as HTMLElement; if (de.textContent !== dots) de.textContent = dots;
     (this.clockEl.querySelector('.ic') as HTMLElement).textContent = night ? '☾' : h < 7 || h > 18 ? '◐' : '☀';
     const tally = ('||||| '.repeat(Math.floor(c.day / 5)) + '|'.repeat(c.day % 5)).trim();
     (this.clockEl.querySelector('.t') as HTMLElement).innerHTML = `DAY ${c.day} <span style="font-size:11px;opacity:.75;letter-spacing:-2px">${tally}</span> - ${c.label}`;

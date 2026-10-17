@@ -16,24 +16,24 @@ export class Post {
     this.rt.depthTexture.type = THREE.UnsignedIntType;
     this.mat = new THREE.ShaderMaterial({
       uniforms: {
-        tC: { value: this.rt.texture }, tD: { value: this.rt.depthTexture }, res: { value: new THREE.Vector2(4, 4) },
+        tC: { value: this.rt.texture }, tD: { value: this.rt.depthTexture }, res: { value: new THREE.Vector2(4, 4) }, scr: { value: new THREE.Vector2(4, 4) },
         range: { value: 800 }, uFilter: { value: 0 }, flash: { value: 0 }, rainbow: { value: 0 }, star: { value: new THREE.Vector4(0, 0, 0, 0) }, time: { value: 0 },
       },
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
       fragmentShader: /* glsl */ `
-        uniform sampler2D tC, tD; uniform vec2 res; uniform float range, uFilter, flash, rainbow, time; uniform vec4 star;
+        uniform sampler2D tC, tD; uniform vec2 res, scr; uniform float range, uFilter, flash, rainbow, time; uniform vec4 star;
         varying vec2 vUv;
-        float D(vec2 o){ return texture2D(tD, vUv + o / res).x * range; }
+        float D(vec2 o){ return texture2D(tD, vUv + o / scr).x * range; }   // o in screen pixels
         float b2(vec2 a){ a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
         float b4(vec2 a){ return b2(0.5 * a) * 0.25 + b2(a); }
         void main(){
           vec4 c = texture2D(tC, vUv);
           vec2 fc = floor(vUv * res);
           if (uFilter > 0.5) {
+            // outlines one SCREEN pixel thin: only where the next screen pixel falls in a nearer low-res texel
             float d = D(vec2(0.0));
             float behind = max(max(d - D(vec2(1.0, 0.0)), d - D(vec2(-1.0, 0.0))), max(d - D(vec2(0.0, 1.0)), d - D(vec2(0.0, -1.0))));
-            if (behind > 0.8) c.rgb = c.rgb * 0.28 + vec3(0.02, 0.02, 0.05);
-            else if (D(vec2(0.0, 1.0)) - d > 0.8) c.rgb *= 1.18;
+            if (behind > 0.8) c.rgb = c.rgb * 0.22 + vec3(0.02, 0.02, 0.05);
             float L = 18.0; c.rgb = floor(c.rgb * L + b4(fc)) / L;
           }
           // rainbow: dithered arc across the upper sky part of the view
@@ -61,9 +61,11 @@ export class Post {
     this.scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.mat));
   }
 
-  setSize(w: number, h: number) {
+  /** w,h = the low-res scene; sw,sh = the screen it is shown on. */
+  setSize(w: number, h: number, sw: number, sh: number) {
     this.rt.setSize(w, h);
     (this.mat.uniforms.res.value as THREE.Vector2).set(w, h);
+    (this.mat.uniforms.scr.value as THREE.Vector2).set(sw, sh);
   }
 
   render(r: THREE.WebGLRenderer, scene: THREE.Scene, cam: THREE.Camera) {

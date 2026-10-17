@@ -31,7 +31,17 @@ export class CameraRig {
     });
     addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
     addEventListener('blur', () => this.keys.clear());
-    el.addEventListener('wheel', (e) => { e.preventDefault(); this.setZoom(this.zoomI + (e.deltaY > 0 ? -1 : 1)); }, { passive: false });
+    // trackpads send dozens of tiny wheel events: add them up, step one level, then wait a moment
+    let acc = 0, lock = 0;
+    el.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const now = performance.now();
+      if (now < lock) return;
+      acc += e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY;
+      if (Math.abs(acc) < 70) return;
+      this.setZoom(this.zoomI + (acc > 0 ? -1 : 1));
+      acc = 0; lock = now + 380;
+    }, { passive: false });
     el.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; this.drag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, on: false }; this.dragged = false; el.setPointerCapture(e.pointerId); });
     el.addEventListener('pointermove', (e) => {
       const d = this.drag; if (!d) return;

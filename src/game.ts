@@ -78,9 +78,10 @@ export class Game {
 
   resize() {
     const z = this.rig.zoom, W = Math.ceil(innerWidth / z), H = Math.ceil(innerHeight / z);
-    this.renderer.setSize(W, H, false);
+    // the scene renders at low res; the final pass runs at screen res so outlines can be 1 px thin
+    this.renderer.setSize(W * z, H * z, false);
     Object.assign(this.canvas.style, { width: W * z + 'px', height: H * z + 'px' });
-    this.post.setSize(W, H);
+    this.post.setSize(W, H, W * z, H * z);
     this.rig.W = W; this.rig.H = H;
   }
 
