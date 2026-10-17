@@ -105,6 +105,37 @@ export class Ambience {
     this.zone = Z;
   }
 
+  // ---------- people ----------
+  whistle() { const t = this.ctx?.currentTime; if (t === undefined) return; this.tone('sine', t, 0.18, 1900, 2300, 0.08, 0); this.tone('sine', t + 0.22, 0.32, 2300, 1700, 0.08, 0); }
+  alarm() { const t = this.ctx?.currentTime; if (t === undefined) return; for (let i = 0; i < 3; i++) this.tone('square', t + i * 0.16, 0.12, 660, 640, 0.03, 0); }
+  chime(big: boolean) {
+    const t = this.ctx?.currentTime; if (t === undefined) return;
+    const notes = big ? [392, 494, 587, 784, 988] : [587, 784, 988];
+    notes.forEach((f, i) => this.tone('triangle', t + i * (big ? 0.14 : 0.09), big ? 1.6 : 0.5, f, f, big ? 0.05 : 0.04, 0));
+    if (big) for (const f of [196, 247, 294]) this.tone('sine', t, 2.8, f, f, 0.035, 0);
+  }
+  /** Speech: a few murmured blips at the speaker's pitch. */
+  blip(voice: number) {
+    const t = this.ctx?.currentTime; if (t === undefined) return;
+    const n = 3 + ((Math.random() * 4) | 0), pan = (Math.random() - 0.5) * 0.6;
+    for (let i = 0; i < n; i++) { const f = 260 * voice * (0.85 + Math.random() * 0.4); this.tone('square', t + i * 0.075, 0.05, f, f * 0.9, 0.012, pan); }
+  }
+  private lifeT = 0;
+  /** Campfire crackle near the fire, torch crackle at night, footsteps while walking. */
+  life(fireDist: number, torches: boolean, walking: boolean) {
+    const ctx = this.ctx; if (!ctx || this.muted) return;
+    const dt = 1 / 60; this.lifeT += dt;
+    const fire = Math.max(0, 1 - fireDist / 30);
+    if (Math.random() < dt * (fire * 9 + (torches ? 2.5 : 0))) this.crack(0.03 + fire * 0.05);
+    if (walking && this.lifeT > 0.36) { this.lifeT = 0; this.crack(0.018, 500 + Math.random() * 300, 0.05); }
+  }
+  private crack(vol: number, freq = 2500 + Math.random() * 2500, dur = 0.03) {
+    const ctx = this.ctx!, t = ctx.currentTime, src = ctx.createBufferSource(); src.buffer = this.noise;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 1.2;
+    const g = ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+    src.connect(f); f.connect(g); g.connect(this.master); src.start(t, Math.random() * 2); src.stop(t + dur + 0.01);
+  }
+
   // ---------- creature voices ----------
   private tone(type: OscillatorType, t: number, dur: number, f0: number, f1: number, vol: number, pan = (Math.random() - 0.5) * 1.4) {
     const ctx = this.ctx!, o = ctx.createOscillator(), g = ctx.createGain(), p = ctx.createStereoPanner();

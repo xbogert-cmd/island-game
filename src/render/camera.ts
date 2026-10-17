@@ -14,7 +14,12 @@ export class CameraRig {
   W = 1; H = 1;
   private y = 0;
   private keys = new Set<string>();
-  private drag: { x: number; y: number } | null = null;
+  private drag: { x: number; y: number; sx: number; sy: number; on: boolean } | null = null;
+  /** true if the last pointer press turned into a drag (so it is not a click) */
+  dragged = false;
+  /** the camera glides after this point unless the player pans away */
+  follow: { x: number; z: number } | null = null;
+  followOn = true;
   onResize = () => {};
 
   constructor(private world: World, el: HTMLElement) {
@@ -27,11 +32,13 @@ export class CameraRig {
     addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
     addEventListener('blur', () => this.keys.clear());
     el.addEventListener('wheel', (e) => { e.preventDefault(); this.setZoom(this.zoomI + (e.deltaY > 0 ? -1 : 1)); }, { passive: false });
-    el.addEventListener('pointerdown', (e) => { this.drag = { x: e.clientX, y: e.clientY }; el.setPointerCapture(e.pointerId); });
+    el.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; this.drag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, on: false }; this.dragged = false; el.setPointerCapture(e.pointerId); });
     el.addEventListener('pointermove', (e) => {
-      if (!this.drag) return;
-      const z = ZOOMS[this.zoomI], dx = (e.clientX - this.drag.x) / z * PX, dy = (e.clientY - this.drag.y) / z * PX / Math.sin(PITCH);
-      this.drag = { x: e.clientX, y: e.clientY };
+      const d = this.drag; if (!d) return;
+      if (!d.on && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 6) return;
+      d.on = this.dragged = true;
+      const z = ZOOMS[this.zoomI], dx = (e.clientX - d.x) / z * PX, dy = (e.clientY - d.y) / z * PX / Math.sin(PITCH);
+      d.x = e.clientX; d.y = e.clientY;
       this.pan(-dx, -dy);
     });
     el.addEventListener('pointerup', () => (this.drag = null));
@@ -43,6 +50,7 @@ export class CameraRig {
 
   /** Pan in screen directions (right, down) by world units. */
   pan(right: number, down: number) {
+    this.followOn = false;
     const c = Math.cos(this.yaw), s = Math.sin(this.yaw);
     this.target.x += right * c + down * s;
     this.target.z += -right * s + down * c;
@@ -60,6 +68,10 @@ export class CameraRig {
     if (this.keys.has('arrowup') || this.keys.has('w')) d -= sp;
     if (this.keys.has('arrowdown') || this.keys.has('s')) d += sp;
     if (r || d) this.pan(r, d);
+    if (this.followOn && this.follow) {
+      const k = Math.min(1, dt * 3.5);
+      this.target.x += (this.follow.x - this.target.x) * k; this.target.z += (this.follow.z - this.target.z) * k;
+    }
     if (this.turnT < 1) {
       this.turnT = Math.min(1, this.turnT + dt / 0.7);
       const k = this.turnT, e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;   // ease in-out

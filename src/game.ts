@@ -12,7 +12,8 @@ import { SpriteBatch, buildAtlas } from './render/sprites';
 import { PITCH, PX, U } from './render/shared';
 import { Clock } from './sim/clock';
 import { Weather } from './sim/weather';
-import { Survivors } from './life/people';
+import { Group } from './life/group';
+import { ATLAS } from './render/sprites';
 import { Wildlife } from './life/wildlife';
 import { Particles } from './life/particles';
 
@@ -29,7 +30,9 @@ export class Game {
   veg: Vegetation;
   props: PropsOut;
   fx: WeatherFx;
-  survivors: Survivors;
+  group: Group;
+  /** person the camera follows instead of the leader (set from the UI) */
+  camWho: import('./life/people').Person | null = null;
   wildlife: Wildlife;
   particles: Particles;
   private batch: SpriteBatch;
@@ -39,6 +42,7 @@ export class Game {
   private last = performance.now();
   private onFrame: ((dt: number) => void)[] = [];
   viewR = 60;
+  private tally: { ctx: CanvasRenderingContext2D; tex: THREE.CanvasTexture; days: number };
 
   constructor(public world: World, public canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
@@ -54,10 +58,11 @@ export class Game {
     this.batch = new SpriteBatch(buildAtlas(), 5000);
     this.particles = new Particles(this.batch);
     this.wildlife = new Wildlife(world, this.batch, this.particles);
-    this.survivors = new Survivors(world);
-    this.scene.add(new Terrain(world).group, new Water(world).group, this.veg.group, this.props.group, this.fx.group, this.batch.mesh, this.survivors.batch.mesh);
+    this.group = new Group(world, this.clock, this.weather, this.particles);
+    this.scene.add(new Terrain(world).group, new Water(world).group, this.veg.group, this.props.group, this.fx.group, this.batch.mesh, this.group.bodies.batch.mesh, this.group.bodies.batch.silhouette(), ...this.group.bodies.lights);
     for (const r of world.rivers) for (const k of r.falls) { const p = r.pts[Math.min(r.pts.length - 1, k + 1)]; this.falls.push({ x: p.x, y: p.y, z: p.z }); }
     this.sky = new Sky(this.scene);
+    this.tally = this.makeTally();
     this.rig = new CameraRig(world, canvas);
     this.rig.onResize = () => this.resize();
     this.rig.jumpTo(world.crash.x, world.crash.z);
@@ -81,8 +86,12 @@ export class Game {
 
   step(rdt: number) {
     const clock = this.clock, wx = this.weather;
-    const dt = rdt * (clock.speed || 0);          // world time (pauses with the clock)
-    clock.tick(rdt);
+    const g = this.group, live = !!g.leader, ts = g.timeScale;
+    const dt = rdt * (clock.speed || 0) * ts;     // world time (pauses with the clock, slows for first sightings)
+    if (live) clock.tick(rdt * ts);
+    const who = this.camWho && this.camWho.mode !== 'camp' ? this.camWho : g.leader;
+    if (!this.camWho || who !== this.camWho) this.camWho = null;
+    this.rig.follow = g.focus && g.leader ? { x: (g.focus.x + g.leader.x * 0.2) / 1.2, z: (g.focus.z + g.leader.z * 0.2) / 1.2 } : who;
     U.uTime.value += dt;
     this.rig.update(rdt);
     const t = this.rig.target, hour = clock.hour, night = clock.night;
@@ -113,9 +122,12 @@ export class Game {
     }
     this.ambientParticles(dt, t);
     this.particles.update(dt);
-    this.survivors.update(dt, night, wx.rain, Math.max(0, 1 - wx.rain * 0.8));
+    g.update(dt);
+    if (live) this.drawTally(clock.day);
     this.batch.begin();
-    this.wildlife.update(dt, t, this.viewR, night, this.survivors.people, wx.rain);
+    g.bodies.draw(this.batch, night, { ...g.fire, lit: Math.max(0, 1 - wx.rain * 0.8) }, t);
+    this.drawLife(t);
+    this.wildlife.update(dt, t, this.viewR, night, g.people, wx.rain);
     this.particles.draw();
     this.batch.end();
     for (const f of this.onFrame) f(rdt);
@@ -138,6 +150,51 @@ export class Game {
     if (wx.wind > 0.55 && Math.random() < dt * 25 * (wx.wind - 0.5)) {
       const x = t.x - U.uWindDir.value.x * this.viewR + (Math.random() - 0.5) * this.viewR * 2, z = t.z - U.uWindDir.value.y * this.viewR + (Math.random() - 0.5) * this.viewR * 2;
       P.emit('leaf', x, heightAt(this.world, x, z) + 2 + Math.random() * 4, z, { vx: U.uWindDir.value.x * 14, vz: U.uWindDir.value.y * 14, vy: (Math.random() - 0.5) * 2, max: 6, r: 0.35, g: 0.65, b: 0.3, fade: false });
+    }
+  }
+
+  /** Scratches on the side of the fuselage, one per day. */
+  private makeTally() {
+    const c = document.createElement('canvas'); c.width = 64; c.height = 8;
+    const tex = new THREE.CanvasTexture(c); tex.magFilter = tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false;
+    const f = this.world.landmarks.find(l => l.kind === 'fuselage')!;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(8, 1), new THREE.MeshToonMaterial({ map: tex, transparent: true, alphaTest: 0.5 }));
+    const g = new THREE.Group(); g.position.set(f.x, heightAt(this.world, f.x, f.z), f.z); g.rotation.y = -f.rot;
+    m.position.set(-1, 2.1, 1.33); m.rotation.x = -0.62; g.add(m); this.scene.add(g);    // tangent to the upper side of the hull
+    const back = m.clone(); back.position.z = -1.33; back.rotation.set(0.62, Math.PI, 0); g.add(back);
+    return { ctx: c.getContext('2d')!, tex, days: 0 };
+  }
+  private drawTally(days: number) {
+    const t = this.tally; if (t.days === days) return;
+    t.days = days; const g = t.ctx; g.clearRect(0, 0, 64, 8); g.fillStyle = '#3a2a22';
+    for (let d = 0; d < Math.min(days, 30); d++) {
+      const grp = Math.floor(d / 5), k = d % 5, x = 2 + grp * 10 + k * 2;
+      if (k === 4) { for (let i = 0; i < 8; i++) g.fillRect(x - 8 + i, 7 - i, 1, 1); } else g.fillRect(x, 1, 1, 6);
+    }
+    t.tex.needsUpdate = true;
+  }
+
+  /** Food spots, clues, rumor markers and scout trails. */
+  private drawLife(t: THREE.Vector3) {
+    const g = this.group, b = this.batch, R = this.viewR * 1.3, w = this.world, tt = U.uTime.value;
+    const near = (x: number, z: number, m = 0) => Math.abs(x - t.x) < R + m && Math.abs(z - t.z) < R * 1.2 + m;
+    for (const p of g.disc.pois) if (p.sprite && near(p.x, p.z)) {
+      if (p.kind === 'clue' && p.known) continue;
+      b.push(p.x, heightAt(w, p.x, p.z) - 0.05, p.z, ATLAS[p.sprite][0]);
+    }
+    for (const m of g.disc.markers) {
+      if (!near(m.x, m.z, m.r)) continue;
+      const red = m.kind === '!', n = Math.max(10, Math.round(m.r * 1.2));
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * 6.283 + tt * 0.05, x = m.x + Math.cos(a) * m.r, z = m.z + Math.sin(a) * m.r;
+        b.push(x, Math.max(heightAt(w, x, z), U.uTide.value) + 0.05, z, ATLAS.dot2[0], false, red ? 1 : 1, red ? 0.35 : 0.9, red ? 0.3 : 0.4, 2, true);
+      }
+      const y = Math.max(heightAt(w, m.x, m.z), U.uTide.value) + 2.5 + Math.sin(tt * 2.5) * 0.25;
+      b.push(m.x, y, m.z, ATLAS[red ? 'xMark' : 'qMark'][0], false, 1, 1, 1, 2);
+    }
+    for (const tr of g.scouting.trips) for (let i = 0; i < tr.trail.length; i += 1) {
+      const q = tr.trail[i]; if (!near(q.x, q.z)) continue;
+      b.push(q.x, heightAt(w, q.x, q.z) + 0.06, q.z, ATLAS.dot2[0], false, 1, 0.95, 0.75, 2, true);
     }
   }
 

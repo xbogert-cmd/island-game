@@ -43,6 +43,9 @@ export class SpriteBatch {
             mv.xy = floor(mv.xy / uPXs + 0.5) * uPXs;
             mv.xy += vec2(ox, oy) * uPXs;
           }
+          #ifdef SIL
+            mv.z += 1.5;                       // only real cover (trees, hills) counts, not the ground at their feet
+          #endif
           gl_Position = projectionMatrix * mv;
           float u = iFlags.x > 0.5 ? 1.0 - c.x : c.x;
           vUv = vec2((iRect.x + u * iRect.z) / uAtlas.x, 1.0 - (iRect.y + (1.0 - c.y) * iRect.w) / uAtlas.y);
@@ -56,6 +59,11 @@ export class SpriteBatch {
         void main(){
           vec4 c = texture2D(uMap, vUv);
           if (c.a < 0.5) discard;
+          #ifdef SIL
+            if (b4(gl_FragCoord.xy) >= 0.5) discard;
+            gl_FragColor = vec4(vec3(0.98, 0.92, 0.72) * (0.55 + 0.45 * uAmbient), 1.0);
+            return;
+          #endif
           vec3 col = c.rgb * vTint.rgb;
           if (vTint.a <= 1.0) {                 // lit sprite, alpha via ordered dither
             if (b4(gl_FragCoord.xy) >= vTint.a) discard;
@@ -66,6 +74,16 @@ export class SpriteBatch {
     });
     this.mesh = new THREE.Mesh(g, mat);
     this.mesh.frustumCulled = false;
+  }
+
+  /** A see-through silhouette pass: shows these sprites where something (trees, hills) hides them. */
+  silhouette() {
+    const src = this.mesh.material as THREE.ShaderMaterial, m = src.clone();
+    m.uniforms = src.uniforms;             // share live uniforms (clone() would copy the texture and freeze them)
+    m.defines = { SIL: 1 }; m.depthFunc = THREE.GreaterDepth; m.depthWrite = false;
+    const mesh = new THREE.Mesh(this.geo, m); mesh.frustumCulled = false;
+    mesh.renderOrder = 5; this.mesh.renderOrder = 6;    // silhouettes first, so the sprites themselves win where they overlap
+    return mesh;
   }
 
   begin() { this.n = 0; }
@@ -128,6 +146,24 @@ const DEFS: Record<string, { frames: string[][]; outline?: boolean }> = {
   splash: { frames: [['x.x', '.x.']], outline: false },
   leaf: { frames: [['xx']], outline: false },
   ring: { frames: [['....xxxxxx....', '..xx......xx..', 'xx..........xx', '..xx......xx..', '....xxxxxx....']], outline: false },
+  // people: torch flame, mood icons, markers
+  flame: { frames: [['.y.', 'yzy', 'oyo', '.o.'], ['y..', 'yzy', 'oyo', '.o.'], ['..y', 'yzy', 'oyo', '.o.']], outline: false },
+  mHappy: { frames: [['.yyy.', 'yeyey', 'yyyyy', 'yeeey', '.yyy.']] },
+  mAngry: { frames: [['r.r.r', '.rrr.', 'rr.rr', '.rrr.', 'r.r.r']] },
+  mWorry: { frames: [['..b..', '.bbb.', 'bbbbb', 'bxbbb', '.bbb.']] },
+  mSad: { frames: [['bb.bb', '.....', '.eee.', 'e...e', 'b....']] },
+  mScared: { frames: [['w.w.w', 'w.w.w', 'w.w.w', '.....', 'w.w.w']] },
+  mSleep: { frames: [['wwww.', '..w..', '.w...', 'wwww.'], ['.....', 'wwww.', '..w..', 'wwww.']] },
+  mFond: { frames: [['.p.p.', 'ppppp', 'ppppp', '.ppp.', '..p..']] },
+  mPain: { frames: [['.r.', 'rrr', '.r.']] },
+  qMark: { frames: [['.yyy.', 'yy.yy', '...yy', '..yy.', '..yy.', '.....', '..yy.']] },
+  xMark: { frames: [['rr', 'rr', 'rr', 'rr', 'rr', '..', 'rr']] },
+  // food spots and clues
+  fruitBush: { frames: [['..vvVv..', '.vrvvvr.', 'vvvVvvvv', 'vrvvvrvV', '.vvVvvv.', '...nn...']] },
+  coconuts: { frames: [['.nn.nn.', 'nNnnnNn', '.nnNnn.']] },
+  shells: { frames: [['p.x..R', 'pp.xxR', '..x...']] },
+  suitcase: { frames: [['..aa..', 'hhhhhh', 'hahhah', 'hhhhhh', 'hahhah']] },
+  seat: { frames: [['bb...', 'bb...', 'bb...', 'bbbbb', 'g...g']] },
 };
 
 export type SpriteName = keyof typeof DEFS;

@@ -4,6 +4,7 @@ import type { Game } from '../game';
 import type { WeatherKind } from '../sim/weather';
 import type { Ambience } from '../audio/ambience';
 import { U } from '../render/shared';
+import { MAP } from '../life/discovery';
 
 const CSS = `
 .hud { position: absolute; font-family: 'Press Start 2P', monospace; color: #f4f1e6; user-select: none; z-index: 5; }
@@ -21,7 +22,7 @@ const CSS = `
 #panel.open { display: flex; }
 #panel label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 #panel input[type=text], #panel select { font: 10px 'Press Start 2P', monospace; background: #0b1020; color: #f4f1e6; border: 2px solid #2b3766; border-radius: 6px; padding: 6px; width: 110px; }
-#hint { bottom: 12px; left: 14px; font-size: 8px; opacity: 0.8; padding: 8px 12px; }
+#hint { bottom: 12px; right: 14px; font-size: 8px; opacity: 0.8; padding: 8px 12px; }
 `;
 
 const BIOME_RGB: Record<number, number[]> = {
@@ -31,7 +32,7 @@ const BIOME_RGB: Record<number, number[]> = {
 
 export class Hud {
   private clockEl: HTMLElement; private wxEl: HTMLElement;
-  private mini: HTMLCanvasElement; private miniBase: ImageData;
+  private mini: HTMLCanvasElement; private miniBase: ImageData; private miniDim: ImageData; private dimVer = -1; private dimT = 0;
   constructor(private game: Game, audio: Ambience) {
     const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
     const el = (html: string) => { const d = document.createElement('div'); d.innerHTML = html.trim(); const e = d.firstElementChild as HTMLElement; document.body.appendChild(e); return e; };
@@ -46,9 +47,11 @@ export class Hud {
     const miniWrap = el('<div id="mini" class="hud"><canvas width="192" height="192"></canvas></div>');
     this.mini = miniWrap.querySelector('canvas')!;
     this.miniBase = this.buildMinimap();
+    this.miniDim = new ImageData(new Uint8ClampedArray(this.miniBase.data), 192, 192);
     miniWrap.addEventListener('pointerdown', e => {
-      const r = this.mini.getBoundingClientRect();
-      game.rig.jumpTo(((e.clientX - r.left) / r.width) * N, ((e.clientY - r.top) / r.height) * N);
+      const r = this.mini.getBoundingClientRect(), x = ((e.clientX - r.left) / r.width) * N, z = ((e.clientY - r.top) / r.height) * N;
+      if (game.group.scoutPick) game.group.clickGround(x, z);
+      else { game.rig.jumpTo(x, z); game.rig.followOn = false; }
       e.stopPropagation();
     });
 
@@ -81,7 +84,7 @@ export class Hud {
     const go = (seed: string | number) => { location.search = `?seed=${seed}`; };
     panel.querySelector('#o-go')!.addEventListener('click', () => go((panel.querySelector('#o-seed') as HTMLInputElement).value || 1));
     panel.querySelector('#o-rand')!.addEventListener('click', () => go((Math.random() * 1e9) | 0));
-    el('<div id="hint" class="hud pill">DRAG / WASD: MOVE &nbsp; SCROLL: ZOOM &nbsp; Q/E: ROTATE &nbsp; SPACE: PAUSE</div>');
+    el('<div id="hint" class="hud pill">CLICK: GO &nbsp; RIGHT-CLICK: WHISTLE &nbsp; DRAG: LOOK &nbsp; Q/E: TURN</div>');
     document.querySelectorAll('.hud').forEach(e => e.addEventListener('pointerdown', (ev: Event) => ev.stopPropagation()));
   }
 
@@ -102,12 +105,36 @@ export class Hud {
     const g = this.game, c = g.clock, wx = g.weather;
     const night = c.night > 0.5, h = c.hour;
     (this.clockEl.querySelector('.ic') as HTMLElement).textContent = night ? '☾' : h < 7 || h > 18 ? '◐' : '☀';
-    (this.clockEl.querySelector('.t') as HTMLElement).textContent = `DAY ${c.day} - ${c.label}`;
+    const tally = ('||||| '.repeat(Math.floor(c.day / 5)) + '|'.repeat(c.day % 5)).trim();
+    (this.clockEl.querySelector('.t') as HTMLElement).innerHTML = `DAY ${c.day} <span style="font-size:11px;opacity:.75;letter-spacing:-2px">${tally}</span> - ${c.label}`;
     const label = wx.storm > 0.6 ? '⛈ STORM' : wx.rain > 0.3 ? '☂ RAIN' : wx.cloud > 0.5 ? '☁ CLOUDY' : night ? '✦ CLEAR NIGHT' : '☀ CLEAR';
     if (this.wxEl.textContent !== label) this.wxEl.textContent = label;
     // minimap + camera footprint
     const m = this.mini.getContext('2d')!, k = 192 / N, r = g.rig, t = r.target;
-    m.putImageData(this.miniBase, 0, 0);
+    const disc = g.group.disc;
+    if (disc.exploredVer !== this.dimVer && (this.dimT -= 1 / 60) <= 0) {
+      this.dimT = 0.5; this.dimVer = disc.exploredVer;
+      const a = this.miniBase.data, o = this.miniDim.data, ex = disc.explored;
+      for (let i = 0; i < MAP * MAP; i++) { const f = ex[i] ? 1 : 0.55; o[i * 4] = a[i * 4] * f; o[i * 4 + 1] = a[i * 4 + 1] * f; o[i * 4 + 2] = a[i * 4 + 2] * f; }
+    }
+    m.putImageData(this.miniDim, 0, 0);
+    for (const p of disc.pois) if (p.known) {
+      m.fillStyle = p.kind === 'water' ? '#7fd8ff' : p.kind === 'food' ? '#8af07a' : '#ffffff';
+      const x = p.x * k, y = p.z * k;
+      if (p.major) { m.beginPath(); m.moveTo(x, y - 3); m.lineTo(x + 3, y); m.lineTo(x, y + 3); m.lineTo(x - 3, y); m.fill(); } else m.fillRect(x - 1.5, y - 1.5, 3, 3);
+    }
+    for (const tr of g.group.scouting.trips) { m.fillStyle = '#ffd08a'; for (let i = 0; i < tr.trail.length; i += 2) m.fillRect(tr.trail[i].x * k - 0.5, tr.trail[i].z * k - 0.5, 1, 1); }
+    for (const mk of disc.markers) {
+      m.strokeStyle = mk.kind === '!' ? '#ff5a4a' : '#ffd65a'; m.lineWidth = 1.5;
+      m.beginPath(); m.arc(mk.x * k, mk.z * k, Math.max(3, mk.r * k), 0, 6.283); m.stroke();
+      m.fillStyle = m.strokeStyle; m.font = '7px monospace'; m.fillText(mk.kind, mk.x * k - 2, mk.z * k + 3);
+    }
+    for (const p of g.group.people) {
+      if (p === g.group.leader || !(p.mode === 'follow' || p.mode === 'wait' || p.mode === 'rescued' || p.mode === 'scout' || p.mode === 'lost' || p.mode === 'hurt')) continue;
+      m.fillStyle = p.mode === 'scout' ? '#ffa040' : p.mode === 'lost' || p.mode === 'hurt' ? '#ff5a4a' : '#8af07a'; m.fillRect(p.x * k - 1, p.z * k - 1, 2, 2);
+    }
+    const ld = g.group.leader;
+    if (ld) { m.fillStyle = '#000'; m.fillRect(ld.x * k - 2, ld.z * k - 2, 4, 4); m.fillStyle = '#fff'; m.fillRect(ld.x * k - 1, ld.z * k - 1, 2, 2); }
     const hw = (r.W * 0.125) / 2, hh = (r.H * 0.125) / 2 / Math.sin(0.82), cs = Math.cos(r.yaw), sn = Math.sin(r.yaw);
     const pt = (a: number, b: number) => [(t.x + a * cs + b * sn) * k, (t.z - a * sn + b * cs) * k];
     m.strokeStyle = '#fff'; m.lineWidth = 1; m.beginPath();
