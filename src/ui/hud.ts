@@ -46,11 +46,14 @@ const CSS = `
 const row = (a: string, b: string) => `<div class="row"><b>${a}</b><span>${b}</span></div>`;
 const HELP = `
 <h5>CONTROLS (MOUSE ONLY)</h5>
-${row('Click the ground', 'Walk there. Your group follows.')}
-${row('Click a survivor', 'Their card: bring them along, send them scouting, find them.')}
+${row('Click the ground', 'Walk there. Leave camp and your crew follows; come back and they go back to work.')}
+${row('ALONE / CREW / ALL', 'Who comes when you leave camp. CREW is your picks, filled out by the camp in turns.')}
+${row('Click a survivor', 'Their card: bring them next trip, send them scouting, find them.')}
+${row('Click a build site', 'Pitch in yourself. Everyone works faster with you there.')}
+${row('Click a message', 'Go to whoever it is about. CAMP takes you home.')}
 ${row('Click yourself', 'Your group waits here. Click again to call them.')}
 ${row('Right-click', 'Whistle: everyone with you comes running.')}
-${row('Stand still', 'Your group spreads out and searches around you.')}
+${row('Stand still', 'Your crew gets to work: fishing, gathering, patching people up. They carry it home.')}
 ${row('Drag', 'Look around. The camera follows you again when you walk.')}
 ${row('Scroll  or  − / +', 'Zoom in and out.')}
 ${row('Q / E', 'Turn the view.')}
@@ -93,8 +96,9 @@ export class Hud {
     addEventListener('keydown', e => { if (e.key === ' ' && (e.target as HTMLElement).tagName !== 'INPUT') { e.preventDefault(); (speed.querySelector(game.clock.speed ? '[data-s="0"]' : '[data-s="1"]') as HTMLButtonElement).click(); } });
 
     // zoom: one click per level, so the middle view is always easy to get back to
-    this.zoomEl = el('<div id="zoom" class="hud"><button data-z="-1">−</button><span class="dots"></span><button data-z="1">+</button></div>');
-    this.zoomEl.querySelectorAll('button').forEach(b => b.addEventListener('click', () => game.rig.setZoom(game.rig.zoomI + Number((b as HTMLElement).dataset.z))));
+    this.zoomEl = el('<div id="zoom" class="hud"><button data-z="-1">−</button><span class="dots"></span><button data-z="1">+</button><button data-home title="Look at camp">CAMP</button></div>');
+    this.zoomEl.querySelectorAll('button[data-z]').forEach(b => b.addEventListener('click', () => game.rig.setZoom(game.rig.zoomI + Number((b as HTMLElement).dataset.z))));
+    (this.zoomEl.querySelector('[data-home]') as HTMLElement).onclick = () => { game.rig.jumpTo(game.group.fire.x, game.group.fire.z); game.rig.followOn = false; game.camWho = null; };
 
     const miniWrap = el('<div id="mini" class="hud"><canvas width="192" height="192"></canvas></div>');
     this.mini = miniWrap.querySelector('canvas')!;

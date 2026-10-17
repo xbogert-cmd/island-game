@@ -245,6 +245,7 @@ export class Game {
       if (Math.random() < 0.12) this.particles.emit('dot1', x + (Math.random() - 0.5) * 0.6, y + 0.4, z, { vy: 2.5, vx: (Math.random() - 0.5), max: 1, r: 1, g: 0.65, b: 0.25, emissive: true, fade: false });
       if (Math.random() < 0.06) this.particles.emit('puff', x, y + 1, z, { vy: 1.4, vx: U.uWindDir.value.x * 2, vz: U.uWindDir.value.y * 2, max: 3, r: 0.6, g: 0.6, b: 0.62, a: 0.6 });
     };
+    for (const q of g.crew.edge) if (near(q.x, q.z)) b.push(q.x, heightAt(w, q.x, q.z) - 0.05, q.z, ATLAS.edgePost[0]);
     for (const bd of g.camp.list) {
       if (!near(bd.x, bd.z)) continue;
       const gy = heightAt(w, bd.x, bd.z);

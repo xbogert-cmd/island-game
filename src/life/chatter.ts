@@ -4,6 +4,14 @@ import { dirName } from './scouting';
 import type { Group } from './group';
 
 const pickOf = <T,>(a: T[]) => a[(Math.random() * a.length) | 0];
+const KEEP_LINE: Record<string, string> = {
+  'a photo of their kids': 'I look at this photo every night. They must think I\'m dead.', 'a wedding ring': 'Somebody out there is still waiting for me.',
+  'a wristwatch, stopped at the crash': 'My watch stopped the minute we hit. I can\'t take it off.', 'a paperback with the ending torn out': "I'll never know how this book ends.",
+  'a lucky coin': 'Heads, we get rescued tomorrow.', 'a postcard they never sent': 'I wrote this postcard on the plane. Never got to mail it.',
+  "a child's drawing": "My kid drew this. It's a plane. Funny, huh.", 'a rosary': '(quietly prays over a rosary)',
+  'a lighter that still works': "Still works. Don't tell anyone or they'll all want it.", 'their boarding pass': 'Seat 14C. I keep reading it like it might change.',
+  'a cassette tape': 'No player. I just like holding it.',
+};
 interface Rumor { text: string; from: Person; scary: boolean; told: number; day: number }
 
 /** Small things people notice while working, and how stories change as they're retold. */
@@ -52,6 +60,14 @@ export class Chatter {
     if (has(sp.per, 'liar')) return `${F} found ${r.text}. Bigger than you'd believe.`;
     if (has(sp.per, 'honest') || has(sp.per, 'calm')) return `${F} says there's ${r.text}. That's all we know.`;
     return `Heard from ${F}: ${r.text}.`;
+  }
+
+  /** Something they carried from home. A harmonica gets played. */
+  keepsake(sp: Person): string | null {
+    const k = pickOf(sp.keeps); if (!k) return null;
+    if (k.includes('harmonica')) { return pickOf(['(plays a slow tune on the harmonica)', '(plays something everyone knows the words to)']); }
+    if (k.includes("'s ")) return pickOf([`I still carry ${k}. Feels like they're still with us.`, `I hold ${k} sometimes. Is that strange?`]);
+    return KEEP_LINE[k] ?? null;
   }
 
   /** Talk about what's going on: builds, the hungry, the dead, the cat, legends. */

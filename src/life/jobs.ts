@@ -166,7 +166,7 @@ export class Jobs {
 
   available(p: Person) {
     const g = this.g;
-    return p !== g.leader && p.mode === 'camp' && !p.hurt && p.health < 2 && p.act !== 'ask' && p.act !== 'job' && p.act !== 'huddle' && p.act !== 'funeral' && !p.sleepIn && !g.requests.busy(p);
+    return p !== g.leader && p.mode === 'camp' && !p.hurt && p.health < 2 && p.act !== 'ask' && p.act !== 'job' && p.act !== 'huddle' && p.act !== 'funeral' && p.act !== 'haul' && !p.sleepIn && !g.requests.busy(p);
   }
 
   private score(p: Person, k: JobKind, crew: Person[]) {

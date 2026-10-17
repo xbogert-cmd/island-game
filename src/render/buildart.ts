@@ -134,8 +134,16 @@ function stakes() {
   return c.out();
 }
 
+/** Where camp ends: a short stick with a strip of red cloth tied on. */
+function edgePost() {
+  const c = canvas(5, 10);
+  c.rect(2, 1, 1, 9, 'n'); c.rect(2, 1, 1, 9, 'N'); c.rect(3, 1, 1, 9, 'n');
+  c.rect(3, 2, 2, 2, 'r'); c.set(4, 4, 'r');
+  return c.out();
+}
+
 export const BUILD_ART: Record<string, { frames: string[][] }> = {
   hut: { frames: [hut()] }, storage: { frames: [storage()] }, sickbay: { frames: [sickbay()] }, workbench: { frames: [workbench()] },
   cooking: { frames: [cooking()] }, watchFire: { frames: [watchFire()] }, beacon: { frames: [beacon()] }, fishTrap: { frames: [fishTrap()] },
-  fencePost: { frames: [fencePost()] }, bath: { frames: [bath()] }, stakes: { frames: [stakes()] },
+  fencePost: { frames: [fencePost()] }, edgePost: { frames: [edgePost()] }, bath: { frames: [bath()] }, stakes: { frames: [stakes()] },
 };

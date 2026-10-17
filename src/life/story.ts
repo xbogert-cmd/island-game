@@ -84,7 +84,7 @@ export class Story {
    * Talk around the campfire at night. Lines come from relationships, recent events and trust.
    * `ctx` gives what the talk can be about.
    */
-  campfire(dt: number, sitting: Person[], ctx: { leader: Person | null; away: Person[]; places: string[]; food: boolean; nights: number; hungry: Person[]; gripes: { p: Person; text: string }[]; signal: boolean; chatter: { retell(p: Person): string | null; topical(p: Person): string | null } }) {
+  campfire(dt: number, sitting: Person[], ctx: { leader: Person | null; away: Person[]; places: string[]; food: boolean; nights: number; hungry: Person[]; gripes: { p: Person; text: string }[]; signal: boolean; chatter: { retell(p: Person): string | null; topical(p: Person): string | null; keepsake(p: Person): string | null } }) {
     if (sitting.length < 2 || (this.talkT -= dt) > 0) return;
     this.talkT = 3 + Math.random() * 4;
     const sp = pickOf(sitting), L = ctx.leader, N = sp.per.name;
@@ -113,6 +113,8 @@ export class Story {
     const rt = ctx.chatter.retell(sp), tp = ctx.chatter.topical(sp);
     if (rt) lines.push([2.5, () => this.say(sp, rt, 4.5)]);
     if (tp) lines.push([2.5, () => this.say(sp, tp, 4)]);
+    const ks = ctx.chatter.keepsake(sp);
+    if (ks) lines.push([1.2, () => { this.say(sp, ks, 4.5); if (ks.includes('harmonica')) for (const x of others) this.mood(x, 'happy', 20); }]);
     if (ctx.hungry.includes(sp)) lines.push([3, () => { this.say(sp, pickOf(["My stomach won't stop growling.", "I can't sleep this hungry.", 'Is there really nothing left?'])); this.mood(sp, 'sad', 10); }]);
     if (ctx.signal) lines.push([0.8, () => this.say(sp, pickOf(['Look at the signal fire. Somebody has to see that.', 'Every night I watch the signal fire and hope.']))]);
     if (ctx.places.length) { const pl = pickOf(ctx.places); lines.push([2, () => this.say(sp, pickOf([`Did you see ${pl}? Who made that?`, `I keep thinking about ${pl}.`]))]); }

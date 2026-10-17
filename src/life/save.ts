@@ -33,6 +33,7 @@ export function save(game: Game) {
     people: g.people.map(p => ({
       x: p.x, z: p.z, mode: p.mode, face: p.face, trust: p.per.trust, weakness: p.per.weakness, hurt: p.hurt, heal: p.heal, hungry: p.hungry,
       xp: p.xp, pin: p.pin, sleepIn: p.sleepIn, savedBy: p.savedBy, apart: p.apart, hateT: p.hateT, health: p.health, hungerN: p.hungerN,
+      crew: p.crew, outAt: p.outAt, tripAt: p.tripAt, tiredN: p.tiredN, haul: p.haul, keeps: p.keeps,
       troubleT: g.scouting.tripOf(p)?.troubleT ?? 0,
     })),
     rel: Array.from(g.story.relM), journal: g.story.journal, skillKnown: [...g.story.skillKnown], secretKnown: [...g.story.secretKnown],
@@ -40,7 +41,7 @@ export function save(game: Game) {
     markers: g.disc.markers.map(m => ({ x: m.x, z: m.z, r: m.r, kind: m.kind, text: m.text, fake: m.fake, poi: m.poi ? m.poi.id : -1, who: m.who ? m.who.id : -1 })),
     explored: b64(g.disc.explored),
     stock: { food: g.stock.food, water: g.stock.water, stolen: g.stock.stolen, ration: g.stock.ration, mat: g.stock.mat, today: g.stock.today, tools: g.stock.tools, toolKnown: [...g.stock.toolKnown], hides: g.stock.hides, cured: g.stock.cured },
-    dead: g.health.dead, legend: g.chatter.legend,
+    dead: g.health.dead, legend: g.chatter.legend, crewMode: g.crew.mode,
     cat: { phase: g.cat.phase, name: g.cat.name, signs: g.cat.signs, bold: g.cat.bold, hunting: g.cat.hunting, nights: (g.cat as Any).campNights },
     wear: b64(Uint8Array.from(g.bodies.wear, v => Math.min(255, v))),
     camp: { list: g.camp.list, queue: g.camp.queue.map(b => b.id), nid: (g.camp as Any).nid },
@@ -80,6 +81,7 @@ export function load(game: Game): boolean {
   s.people.forEach((d: Any, i: number) => {
     const p = P[i];
     Object.assign(p, { x: d.x, z: d.z, face: d.face, hurt: d.hurt, heal: d.heal, hungry: d.hungry, xp: d.xp, pin: d.pin, sleepIn: d.sleepIn, savedBy: d.savedBy, apart: d.apart, hateT: d.hateT, health: d.health ?? 0, hungerN: d.hungerN ?? 0 });
+    if (d.keeps) Object.assign(p, { crew: d.crew, outAt: d.outAt, tripAt: d.tripAt, tiredN: d.tiredN, haul: d.haul, keeps: d.keeps });
     p.per.trust = d.trust; p.per.weakness = d.weakness;
     let mode: Mode = d.mode;
     if (mode === 'scout') { mode = 'camp'; const q = g.grid.nearest(g.fire.x + Math.random() * 6 - 3, g.fire.z + Math.random() * 6 - 3); if (q) { p.x = q.x; p.z = q.z; } }
@@ -95,6 +97,8 @@ export function load(game: Game): boolean {
   g.disc.markers = [];
   for (const m of s.markers) g.disc.addMarker({ x: m.x, z: m.z, r: m.r, kind: m.kind, text: m.text, fake: m.fake, poi: m.poi >= 0 ? g.disc.pois[m.poi] : null, who: m.who >= 0 ? P[m.who] : null });
   g.leader = P[s.leader]; g.leader.mode = 'leader'; g.leader.actT = 0;
+  if (s.crewMode) g.crew.mode = s.crewMode;
+  g.crew.out = g.crew.outside(g.leader.x, g.leader.z);
   game.rig.jumpTo(g.leader.x, g.leader.z);
   g.story.log(`(Picked up again on day ${game.clock.day}.)`);
   return true;

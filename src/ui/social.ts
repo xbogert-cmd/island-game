@@ -31,6 +31,11 @@ const CSS = `
 #lead .party canvas { image-rendering: pixelated; width: 30px; height: 39px; display: block; }
 #lead .party .tag { position: absolute; top: -4px; right: -6px; font-size: 10px; }
 #lead .btns { display: flex; flex-direction: column; gap: 6px; }
+#lead .cm { display: flex; flex-direction: column; gap: 4px; }
+#lead .cm button { font-size: 7px; padding: 6px 8px; border-radius: 8px; opacity: .7; }
+#lead .cm button.on { opacity: 1; background: #2f6e33; border-color: #6bc06b; }
+#lead .party .pp.home { opacity: .45; }
+#toasts .t.at { pointer-events: auto; cursor: pointer; }
 #tip { left: 50%; transform: translateX(-50%); bottom: 112px; font-size: 9px; padding: 10px 14px; line-height: 1.7; max-width: 560px; text-align: center; transition: opacity .4s; }
 #toasts { left: 50%; top: 14px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; }
 #toasts .t { font-size: 9px; padding: 9px 14px; line-height: 1.6; max-width: 620px; text-align: center; animation: tin .3s ease-out; }
@@ -133,7 +138,7 @@ export class Social {
 
   constructor(private game: Game, private input: Input) {
     const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
-    this.lead = this.el(`<div id="lead" class="so"><div class="me box"><canvas width="${SW}" height="${SH}"></canvas><div><div class="nm"></div><div class="sub"></div></div></div><div class="party box"></div><div class="btns"><button data-a="roster">PEOPLE</button><button data-a="journal">ISLAND</button></div></div>`);
+    this.lead = this.el(`<div id="lead" class="so"><div class="me box"><canvas width="${SW}" height="${SH}"></canvas><div><div class="nm"></div><div class="sub"></div></div></div><div class="cm"><button data-m="alone" title="Go out on your own">ALONE</button><button data-m="crew" title="Your picks, filled out by the camp">CREW</button><button data-m="all" title="Everyone who can comes">ALL</button></div><div class="party box"></div><div class="btns"><button data-a="roster">PEOPLE</button><button data-a="journal">ISLAND</button></div></div>`);
     this.card = this.el('<div id="card" class="so box"></div>');
     this.roster = this.el('<div id="roster" class="so box panel"></div>');
     this.journal = this.el('<div id="journal" class="so box panel"></div>');
@@ -155,6 +160,7 @@ export class Social {
     this.lead.style.display = 'none';
     (this.lead.querySelector('.me') as HTMLElement).onclick = () => { game.camWho = null; game.rig.followOn = true; };
     this.lead.querySelectorAll('.btns button').forEach(b => (b as HTMLElement).onclick = () => this.toggle((b as HTMLElement).dataset.a === 'roster' ? this.roster : this.journal));
+    this.lead.querySelectorAll('.cm button').forEach(b => (b as HTMLElement).onclick = () => { game.group.crew.setMode((b as HTMLElement).dataset.m as 'alone'); this.partyKey = ''; this.refreshT = 0; });
     input.onPerson = (p) => this.openCard(p);
     addEventListener('keydown', e => { if (e.key === 'Escape') { this.closeCard(); this.roster.classList.remove('open'); this.journal.classList.remove('open'); game.group.scoutPick = null; } });
     this.pickScreen();
@@ -211,6 +217,12 @@ export class Social {
       this.journal.classList.remove('open');
     }
   }
+  /** Camera to someone: a quick look at camp, or ride along with someone out there. */
+  private find(p: Person) {
+    const g = this.game.group, r = this.game.rig;
+    if (p.mode === 'dead') return;
+    if (p.mode === 'camp' || p === g.leader) { r.jumpTo(p.x, p.z); r.followOn = p === g.leader; } else { this.game.camWho = p; r.followOn = true; }
+  }
   private closeCard() { this.card.classList.remove('open'); this.cardP = null; this.cardKey = ''; }
 
   openCard(p: Person) {
@@ -234,6 +246,7 @@ export class Social {
       <div class="row"><b>Skill</b> ${skill}${secret ? ` &nbsp; <b>Secret</b> ${secret}` : ''}</div>
       <div class="row"><b>Now</b> ${where} ${MOOD_TXT[p.mood]} ${p.why}${p.ask ? ' · <b>❗ wants to talk</b>' : ''}</div>
       ${p.health ? `<div class="row"><b>Health</b> ${HEALTH_WORD[p.health]}</div>` : ''}
+      ${p.keeps.length ? `<div class="row"><b>Keeps</b> ${p.keeps.join(' · ')}</div>` : ''}
       ${rec ? `<div class="row"><b>Ideas</b> ${rec.good} worked · ${rec.bad} didn't</div>` : ''}
       <div class="row">${this.workLine(p).replace(/class="k"/g, '').replace('<span >Job</span>', '<b>Job</b>')}</div>
       ${isL ? '' : `<div class="row"><b>Trust in you</b> ${trustWord(per.trust)}</div>`}
@@ -241,12 +254,12 @@ export class Social {
       </div></div><div class="acts"></div>`;
     const btns: [string, string, () => void][] = [];
     if (p.ask) btns.push(['HEAR THEM OUT', 'go', () => { this.closeCard(); this.openCard(p); }]);
-    if (!isL && p.mode === 'camp') btns.push([g.party.length >= PARTY_MAX ? 'GROUP FULL' : 'COME WITH ME', 'go', () => g.invite(p)]);
+    if (!isL && p.mode === 'camp') btns.push(g.crew.out ? [g.party.length >= PARTY_MAX ? 'GROUP FULL' : 'COME WITH ME', 'go', () => g.invite(p)] : p.crew ? ['LEAVE AT CAMP', '', () => g.invite(p)] : ['BRING NEXT TRIP', 'go', () => g.invite(p)]);
     if (p.mode === 'follow' || p.mode === 'wait') btns.push(['GO BACK TO CAMP', '', () => g.dismiss(p)]);
     if (!isL && (p.mode === 'camp' || p.mode === 'follow' || p.mode === 'wait')) btns.push(['GO SCOUT', '', () => { g.askScout(p); if (g.scoutPick === p) { this.closeCard(); this.showTip(`Click where ${per.name} should scout. Right-click to cancel.`, 99); } }]);
     const pj = (p.pin || p.job) as JobKind | '';
     if (!isL && p.mode === 'camp' && pj) btns.push([p.pin ? 'UNPIN JOB' : `KEEP ON ${JOB[pj].label.toUpperCase()}`, '', () => { p.pin = p.pin ? '' : pj; }]);
-    btns.push(['FIND', '', () => { if (p.mode === 'camp' || p === g.leader) { this.game.rig.jumpTo(p.x, p.z); this.game.rig.followOn = p === g.leader; } else { this.game.camWho = p; this.game.rig.followOn = true; } }]);
+    btns.push(['FIND', '', () => this.find(p)]);
     // only rebuild when something changed, so a click is never lost to a refresh
     const key = p.id + html + btns.map(b => b[0]).join();
     if (key === this.cardKey) return;
@@ -260,8 +273,10 @@ export class Social {
 
   private showTip(t: string, secs = 9) { this.tip.textContent = t; this.tip.style.opacity = '1'; this.tipT = secs; }
 
-  private toast(text: string, kind: string) {
-    const e = this.el(`<div class="t box ${kind}"></div>`, this.toastsEl); e.textContent = text;
+  /** Clicking a message about someone takes you to them. */
+  private toast(text: string, kind: string, who?: Person) {
+    const e = this.el(`<div class="t box ${kind}${who ? ' at' : ''}"></div>`, this.toastsEl); e.textContent = text;
+    if (who) e.onclick = () => this.find(who);
     this.toastQ.push({ el: e, t: 6 });
     while (this.toastQ.length > 4) this.toastQ.shift()!.el.remove();
   }
@@ -284,7 +299,7 @@ export class Social {
   // ---------------------------------------------------------------- per frame
   update(dt: number) {
     const game = this.game, g = game.group, S = g.story;
-    for (const t of S.toasts.splice(0)) this.toast(t.text, t.kind);
+    for (const t of S.toasts.splice(0)) this.toast(t.text, t.kind, t.who);
     for (const q of this.toastQ) if ((q.t -= dt) <= 0) q.el.remove();
     this.toastQ = this.toastQ.filter(q => q.t > 0);
     if (g.hints.length && this.tipT <= 0) this.showTip(g.hints.shift()!);
@@ -317,8 +332,8 @@ export class Social {
     const tw = `${cur ? `TODAY: ${cur.title}<br>` : g.goals.opts.length ? 'TODAY: DECIDING...<br>' : ''}FOOD: ${st.word(st.totalFood, n)} · WATER: ${st.word(st.water, n)}${st.ration ? ' · HALF RATIONS' : ''}<div class="gh">GOALS</div>${obHtml}`;
     if (this.todayEl.innerHTML !== tw) this.todayEl.innerHTML = tw;
     const party = this.lead.querySelector('.party') as HTMLElement;
-    const list = [...g.party, ...g.people.filter(p => p.mode === 'rescued'), ...g.scouts];
-    const pk = list.map(p => p.id + p.mode + p.mood + p.ask).join() + Math.round(game.rig.yaw * 2);
+    const list = [...g.party, ...g.people.filter(p => p.mode === 'rescued'), ...g.scouts, ...(g.crew.out ? [] : g.people.filter(p => p.crew && p.mode === 'camp'))];
+    const pk = list.map(p => p.id + p.mode + p.mood + p.ask).join() + Math.round(game.rig.yaw * 2) + g.crew.mode + g.crew.out;
     if (pk !== this.partyKey) this.fillParty(party, list, pk);
     if (this.cardP && this.card.classList.contains('open')) this.fillCard();
     if (this.roster.classList.contains('open')) this.fillRoster();
@@ -333,6 +348,7 @@ export class Social {
     for (const p of list) {
       const e = this.el(`<div class="pp"><span class="tag"></span></div>`, party);
       e.prepend(this.portrait(p)); e.title = p.per.name;
+      if (p.mode === 'camp') { e.classList.add('home'); e.title += ' · comes next trip'; }
       const tag = e.querySelector('.tag') as HTMLElement;
       if (p.mode === 'scout' || p.mode === 'lost' || p.mode === 'hurt') {
         const tr = g.scouting.tripOf(p);
@@ -341,7 +357,9 @@ export class Social {
       } else tag.textContent = p.ask ? '❗' : p.mode === 'wait' ? '⏸' : MOOD_TXT[p.mood];
       e.onclick = () => this.openCard(p);
     }
-    if (!list.length) party.innerHTML = '<div style="font-size:7px;opacity:.6;padding:8px;line-height:1.7">Click a survivor<br>to bring them</div>';
+    for (const b of this.lead.querySelectorAll('.cm button')) b.classList.toggle('on', (b as HTMLElement).dataset.m === g.crew.mode);
+    const empty = { alone: 'Going alone.<br>Nobody follows.', crew: g.crew.out ? 'Nobody came.<br>Click someone to ask.' : 'Your crew joins<br>when you leave camp', all: 'Everyone comes<br>when you leave camp' }[g.crew.mode];
+    if (!list.length) party.innerHTML = `<div style="font-size:7px;opacity:.6;padding:8px;line-height:1.7">${empty}</div>`;
   }
 
   /** Everyone at a glance: what they're good and bad at, what you've learned about them, how they feel about you. */
@@ -370,6 +388,7 @@ export class Social {
         <div><span class="g">+ ${cap(per.strength)}</span> &nbsp; <span class="b">− ${cap(per.weakness)}</span></div>
         <div><span class="k">Skill</span> ${skill}${secret ? ` &nbsp; <span class="k">Secret</span> ${secret}` : ''}</div>
         ${ties ? `<div class="dim">${ties}</div>` : ''}
+        ${p.keeps.length ? `<div class="dim">Keeps ${esc(p.keeps.join(' · '))}</div>` : ''}
         ${rec ? `<div class="dim">Ideas: ${rec.good} worked · ${rec.bad} didn't</div>` : ''}
         ${this.workLine(p)}
       </div>`;
@@ -405,8 +424,9 @@ export class Social {
   private workLine(p: Person) {
     const g = this.game.group, J = g.jobs;
     const exp = Object.entries(p.xp).filter(([k, v]) => v >= 6 && (JOB[k as JobKind].skill !== p.per.skill || g.story.skillKnown.has(p.id))).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k, v]) => `${JOB[k as JobKind].label} (${LEVEL_WORD[level(v)]})`);
-    const likes = [J.likeKnown.has(p.id + ':love') ? `Loves ${JOB[p.love as JobKind].verb}` : '', J.likeKnown.has(p.id + ':hate') ? `Hates ${JOB[p.hate as JobKind].verb}` : ''].filter(Boolean).join(' · ');
-    const now = p.job ? `${JOB[p.job as JobKind].label}${p.pin ? ' 📌' : ''}` : p === g.leader ? 'Leading' : 'Free time';
+    const likes = [J.likeKnown.has(p.id + ':love') ? `Loves ${JOB[p.love as JobKind].verb}` : '', J.likeKnown.has(p.id + ':hate') ? `Hates ${JOB[p.hate as JobKind].verb}` : '',
+      J.likeKnown.has(p.id + ':out+') ? 'Loves getting out' : '', J.likeKnown.has(p.id + ':out-') ? 'Hates leaving camp' : ''].filter(Boolean).join(' · ');
+    const now = p.mode === 'follow' || p.mode === 'wait' ? 'Out with you' : p.job ? `${JOB[p.job as JobKind].label}${p.pin ? ' 📌' : ''}` : p === g.leader ? 'Leading' : p.crew ? 'Free time · comes next trip' : 'Free time';
     return `<div><span class="k">Job</span> ${now}${exp.length ? ` <span class="dim">· ${exp.join(', ')}</span>` : ''}</div>${likes ? `<div class="dim">${likes}</div>` : ''}`;
   }
 
@@ -414,7 +434,7 @@ export class Social {
   private fillJobs() {
     const g = this.game.group, J = g.jobs, C = g.camp, st = g.stock, vis = J.visible();
     const word = (n: number) => n <= 0 ? 'Out' : n < 6 ? 'Low' : n < 16 ? 'Enough' : 'Plenty';
-    const key = 'j' + vis.map(k => k + J.prio[k] + J.status(k) + g.people.filter(p => p.job === k).map(p => p.id).join('.')).join() + C.queue.map(b => b.id + ':' + Math.floor(b.progress * 3) + (C.waitingFor(b) ?? '')).join() + Object.values(st.mat).map(word).join() + J.fresh;
+    const key = 'j' + g.party.map(p => p.id).join('.') + vis.map(k => k + J.prio[k] + J.status(k) + g.people.filter(p => p.job === k).map(p => p.id).join('.')).join() + C.queue.map(b => b.id + ':' + Math.floor(b.progress * 3) + (C.waitingFor(b) ?? '')).join() + Object.values(st.mat).map(word).join() + J.fresh;
     if (key === this.rosterKey) return;
     this.rosterKey = key;
     const shiftG = { day: '☀', evening: '☀☾', night: '☾' };
@@ -436,6 +456,8 @@ export class Social {
     if (g.era !== 'crash') html += `<h5>MATERIALS</h5><div>Wood: ${word(st.mat.wood)} · Bamboo: ${word(st.mat.bamboo)} · Stone: ${word(st.mat.stone)} · Vines: ${word(st.mat.vines)} · Scrap: ${word(st.mat.scrap)}</div>`;
     const free = g.people.filter(p => p !== g.leader && p.mode === 'camp' && !p.job && !p.hurt);
     html += `<h5>FREE RIGHT NOW</h5><div class="dim">${free.length ? free.map(p => p.per.name).join(', ') : 'Nobody — everyone is busy.'}</div>`;
+    const out = g.party;
+    if (out.length) html += `<h5>OUT WITH YOU</h5><div class="dim">${out.map(p => p.per.name).join(', ')} — their jobs go to whoever is at camp.</div>`;
     this.roster.innerHTML = html;
     for (const el of this.roster.querySelectorAll('[data-w]')) for (const p of g.people.filter(p => p.job === (el as HTMLElement).dataset.w)) { const c = this.portrait(p); c.title = p.per.name; el.appendChild(c); }
   }

@@ -39,6 +39,10 @@ export interface Person {
   savedBy: number;
   /** 0 healthy, 1 weak, 2 sick, 3 very sick */
   health: number; hungerN: number;
+  /** trips out: picked for your crew, when they last went out / this trip started, how they feel about going (-1..1), what they gathered */
+  crew: boolean; outAt: number; tripAt: number; outLike: number; tiredN: number; haul: string[];
+  /** things from home they carry; the first is their own, the rest were left to them */
+  keeps: string[];
   step: number;
 }
 
@@ -156,6 +160,7 @@ export class Survivors {
         path: [], repath: 0, stuck: 0, moving: false, act: '', actT: Math.random() * 3, ax: x, az: z, partner: null,
         poseO: null, poseT: 0, torch: false, carry: 0, hurt: false, heal: 0, mood: 'none', tmood: 'none', moodT: 0, why: '', apart: 0, apartHit: false, step: 0, ask: false, bring: '', hungry: false,
         job: '', wph: '', wT: 0, xp: {}, love: '', hate: '', pin: '', hateT: 0, sleepIn: false, watched: false, savedBy: -1, health: 0, hungerN: 0,
+        crew: false, outAt: -1e9, tripAt: 0, outLike: 0, tiredN: 0, haul: [], keeps: [],
       });
     }
   }

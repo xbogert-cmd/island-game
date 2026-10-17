@@ -138,7 +138,7 @@ export class Scouting {
     }
   }
 
-  sightMul(p: Person) { return p.per.strength === 'sharp eyes' ? 1.4 : p.per.weakness === 'poor eyesight' ? 0.7 : 1; }
+  sightMul(p: Person) { return (p.per.strength === 'sharp eyes' ? 1.4 : p.per.weakness === 'poor eyesight' ? 0.7 : 1) * (p.per.skill === 'climber' || p.per.skill === 'navigator' ? 1.25 : 1); }
 
   private trouble(t: Trip) {
     const p = t.p, g = this.g;

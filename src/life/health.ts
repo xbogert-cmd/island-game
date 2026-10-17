@@ -49,7 +49,7 @@ export class Health {
       // the very sick who weren't looked after
       if (p.health >= 3) {
         const neglect = p.hungry || this.thirsty || !careAt(p);
-        if (Math.random() < (neglect ? 0.45 : 0.05)) { this.die(p, neglect ? 'sickness nobody could treat' : 'sickness', neglect); continue; }
+        if (Math.random() < (neglect ? 0.25 : 0.03)) { this.die(p, neglect ? 'sickness nobody could treat' : 'sickness', neglect); continue; }
       }
       p.hungerN = p.hungry ? p.hungerN + 1 : 0;
       let worse = '';
@@ -78,6 +78,13 @@ export class Health {
     p.mode = 'dead'; p.ask = false; p.act = ''; p.path = []; p.hurt = false; p.torch = false; p.carry = 0;
     this.dead.push({ name: N, cause, day: g.clock.day });
     for (const h of g.camp.list) if (h.owners.includes(p.id)) h.owners = h.owners.filter(i => i !== p.id);
+    // whoever was closest keeps what they carried from home
+    const heir = g.people.filter(o => o !== p && o.mode !== 'dead').sort((a, b) => S.rel(b, p) - S.rel(a, p))[0];
+    if (heir && p.keeps.length && (S.rel(heir, p) > 20 || heir.per.pair === p.id)) {
+      const own = (k: string) => k.includes("'s ") ? k : `${N}'s ${k.replace(/^(a|an|their) /, '')}`;
+      heir.keeps.push(...p.keeps.map(own)); S.log(`${heir.per.name} kept ${own(p.keeps[0])}.`);
+    }
+    p.keeps = [];
     const gr: Building = g.camp.add('grave') ?? { id: -1, kind: 'grave', x: g.fire.x + 20, z: g.fire.z, progress: 1, paid: 3, owners: [], shaky: false, skilled: true };
     gr.progress = 1; gr.paid = 3; gr.owners = [p.id]; g.camp.queue = g.camp.queue.filter(b => b !== gr);
     S.toast(`${N} is dead.`, 'bad', p);

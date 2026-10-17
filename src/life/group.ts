@@ -16,6 +16,9 @@ import { Jobs } from './jobs';
 import { Health, HEALTH_WORD } from './health';
 import { Cat } from './cat';
 import { Chatter } from './chatter';
+import { Crew } from './crew';
+import { Building } from './buildings';
+import { mulberry32 } from '../world/noise';
 
 const pickOf = <T,>(a: T[]) => a[(Math.random() * a.length) | 0];
 export const PARTY_MAX = 5;
@@ -39,6 +42,9 @@ export class Group {
   health: Health;
   cat: Cat;
   chatter: Chatter;
+  crew: Crew;
+  /** a build site you're helping with */
+  helping: Building | null = null;
   era: 'crash' | 'camp' = 'crash';
   /** title cards that aren't places (era changes) */
   eraCards: { title: string; sub: string }[] = [];
@@ -103,6 +109,10 @@ export class Group {
     this.health = new Health(this);
     this.cat = new Cat(this);
     this.chatter = new Chatter(this);
+    this.crew = new Crew(this);
+    // something from home in every pocket
+    const rk = mulberry32(w.seed ^ 0x6b33), ks = [...KEEPSAKES].sort(() => rk() - 0.5);
+    this.people.forEach((p, i) => { p.keeps = [ks[i % ks.length]]; });
     // what the camp already knows how to make, from the skills people came with
     const knows: Record<string, Tool[]> = { mechanic: ['knife', 'axe'], builder: ['axe', 'rope'], fisher: ['spear', 'rope'] };
     for (const p of this.people) for (const t of knows[p.per.skill] ?? []) this.stock.toolKnown.add(t);
@@ -144,14 +154,17 @@ export class Group {
     this.story.log('The tail broke off before we hit. It must be inland somewhere.');
     for (const q of this.disc.pois) if (q.kind === 'material' && (q.mat === 'wood' || q.mat === 'scrap')) q.known = true;
     this.lastFind = this.clock.minutes;
-    this.hint('start', 'Click the ground to walk. Click a survivor to bring them along.');
+    this.hint('start', 'Click the ground to walk. Your crew follows when you leave camp. Click a survivor to ask them along.');
   }
 
   clickGround(x: number, z: number) {
     const L = this.leader; if (!L) return;
     if (this.scoutPick) { const p = this.scoutPick; this.scoutPick = null; this.scouting.send(p, x, z); return; }
+    // clicking a build site: you pitch in
+    const b = this.camp.queue.find(b => b.kind !== 'fence' && Math.hypot(b.x - x, b.z - z) < 3.5) ?? null;
+    this.helping = b;
+    if (b) { const a = Math.atan2(L.z - b.z, L.x - b.x), q = this.grid.nearest(b.x + Math.cos(a) * 2.4, b.z + Math.sin(a) * 2.4) ?? b; x = q.x; z = q.z; this.hint('help', 'You pitch in. People work faster with you beside them.'); }
     this.bodies.go(L, x, z);
-    for (const p of this.party) if (p.act === 'search') { p.act = ''; p.path = []; }
     this.still = 0;
     // clicking near a lost or hurt person heads to them
   }
@@ -161,18 +174,18 @@ export class Group {
     if (p.mode === 'follow' || p.mode === 'wait') return;
     if (p.mode !== 'camp') return;
     if (p.hurt) { this.story.say(p, 'I need to rest.'); return; }
-    if (this.party.length >= PARTY_MAX) { this.story.say(p, `Your group is full. (${PARTY_MAX} max)`); return; }
+    if (p.crew && !this.crew.out) { p.crew = false; this.story.say(p, "Okay, I'll stay."); return; }
+    if (this.party.length >= PARTY_MAX && this.crew.out) { this.story.say(p, `Your group is full. (${PARTY_MAX} max)`); return; }
     if (p.per.trust < 20) { this.story.say(p, 'Go without me.'); this.story.mood(p, 'angry', 6); return; }
-    const sleeping = p.pose === 'sleep';
-    p.mode = 'follow'; p.act = ''; p.path = []; p.carry = 0;
-    if (sleeping) { this.story.say(p, 'Huh? Now?!'); this.story.trust(p, -1); }
-    else if (p.per.trust < 35) { this.story.say(p, '...fine.'); p.poseO = 'idle'; p.poseT = 1.5; }
-    else this.story.say(p, pickOf(['Right behind you.', "Let's go.", 'Okay!', 'Lead the way.']));
-    this.hint('party', 'Walk somewhere. Stop, and your group searches around you. Right-click whistles them back.');
+    p.crew = true;
+    if (!this.crew.out) { this.story.say(p, pickOf(["I'll come next time you head out.", 'Count me in.', 'Just say when.'])); this.hint('crew', 'They join you whenever you walk out of camp. Click them again to leave them home.'); return; }
+    this.crew.join(p);
+    if (p.per.trust < 35) { this.story.say(p, '...fine.'); p.poseO = 'idle'; p.poseT = 1.5; }
+    this.hint('party', 'Walk somewhere. Stop, and your group gets to work around you. Right-click whistles them back.');
   }
 
   leaveParty(p: Person) { if (p.mode === 'follow' || p.mode === 'wait') { p.mode = 'camp'; p.act = ''; p.path = []; } }
-  dismiss(p: Person) { if (p.mode === 'follow' || p.mode === 'wait') { this.leaveParty(p); this.story.say(p, 'Heading back to camp.'); } }
+  dismiss(p: Person) { if (p.mode === 'follow' || p.mode === 'wait') { p.crew = false; this.crew.sendHome(p); this.story.say(p, 'Heading back to camp.'); } }
 
   askScout(p: Person) {
     if (p === this.leader || !(p.mode === 'camp' || p.mode === 'follow' || p.mode === 'wait')) return;
@@ -196,6 +209,17 @@ export class Group {
     const f = this.people.filter(p => p.mode === 'follow'), w = this.people.filter(p => p.mode === 'wait');
     if (f.length) { for (const p of f) { p.mode = 'wait'; p.path = []; p.act = ''; } this.story.say(f[0], "We'll wait here."); this.hint('wait', 'Click yourself again to call them.'); }
     else if (w.length) { for (const p of w) { p.mode = 'follow'; p.act = ''; } this.story.say(w[0], 'Coming!'); }
+  }
+
+  /** You, working on a build site with your own hands. */
+  private help(L: Person, b: Building, dt: number) {
+    if (b.progress >= 1 || !this.camp.queue.includes(b) || Math.hypot(b.x - L.x, b.z - L.z) > 5) { this.helping = null; return; }
+    this.bodies.faceToward(L, b.x, b.z);
+    const ok = this.camp.work(b, dt * 0.8, false);
+    L.pose = ok ? 'build' : 'idle';
+    if (!ok) { if (Math.random() < dt * 0.1) this.story.say(L, `We need ${this.camp.waitingFor(b) ?? 'more'} first.`, 2); return; }
+    if (Math.random() < dt * 2) this.fx.emit('dot1', b.x + (Math.random() - 0.5) * 2, this.bodies.ground(b) + 0.6, b.z + (Math.random() - 0.5) * 2, { vy: 1.5, vx: (Math.random() - 0.5) * 2, grav: 6, max: 0.5, r: 0.75, g: 0.6, b: 0.4 });
+    if (b.progress >= 1) { this.helping = null; this.story.trustAll(2, L); this.story.log(`${L.per.name} built the ${b.kind === 'hut' ? 'hut' : 'last of it'} with their own hands. People noticed.`); }
   }
 
   nameIt(poi: Poi, name: string) {
@@ -283,6 +307,7 @@ export class Group {
       const done = this.bodies.advance(L, this.bodies.speed(L) * 1.1, dt);
       L.pose = done ? 'idle' : L.hurt ? 'limp' : 'walk';
       L.torch = night;
+      if (done && this.helping) this.help(L, this.helping, dt);
     }
     const mv = Math.hypot(L.x - lx, L.z - lz);
     if (mv > 0.001) { this.heading = { x: (L.x - lx) / mv, z: (L.z - lz) / mv }; this.still = 0; } else this.still += dt;
@@ -303,6 +328,7 @@ export class Group {
       if (p.hurt && !this.hurtSeen.has(p)) { this.hurtSeen.add(p); this.stats.hurt.push(p.per.name); } else if (!p.hurt) this.hurtSeen.delete(p);
       if (p.hurt && p.heal > 0 && p.mode === 'camp' && (p.heal -= dt * this.healRate(p)) <= 0) { p.hurt = false; this.story.toast(`${p.per.name} is back on their feet.`, 'good', p); }
     }
+    this.crew.update(dt);
     this.scouting.update(dt);
     this.requests.update(dt);
     this.goals.update();
@@ -339,15 +365,16 @@ export class Group {
     const L = this.leader!, B_ = this.bodies, d = Math.hypot(p.x - L.x, p.z - L.z);
     p.torch = night;
     const sp = B_.speed(p) * (p.act === 'run' || d > 10 ? 1.55 : 1.1);
-    if (d > 12) {
+    const busy = p.act === 'gather' || p.act === 'patch';
+    if (d > (busy && L.path.length === 0 ? 22 : 12)) {
       if ((p.repath -= dt) <= 0 || !p.path.length) { p.repath = 1.2; B_.go(p, L.x, L.z); }
       B_.advance(p, sp, dt); p.pose = p.hurt ? 'limp' : 'run';
-      if (p.act === 'search') p.act = '';
+      if (p.act === 'search' || p.act === 'gather' || p.act === 'patch') { p.act = ''; p.bring = ''; }
       return;
     }
     if (p.act === 'run' && d < 5) p.act = '';
-    if (this.still > 2 && L.path.length === 0 && p.mode === 'follow' && !p.hurt) { this.search(p, dt); return; }
-    if (p.act === 'search') { p.act = ''; p.path = []; }
+    if (this.still > 2 && L.path.length === 0 && p.mode === 'follow' && !p.hurt && this.crew.out) { if (!this.crew.work(p, dt)) this.search(p, dt); return; }
+    if (p.act === 'search' || p.act === 'gather' || p.act === 'patch') { p.act = ''; p.path = []; p.bring = ''; }
     const back = 1.8 + Math.floor(i / 2) * 1.4, side = (i % 2 ? 1 : -1) * (0.9 + (i >> 2) * 0.5);
     const tx = L.x - this.heading.x * back - this.heading.z * side, tz = L.z - this.heading.z * back + this.heading.x * side;
     if (p.path.length) { if (B_.advance(p, sp, dt)) p.path = []; p.pose = 'walk'; return; }
@@ -390,6 +417,7 @@ export class Group {
     if (p.act === 'ask' || p.act === 'job') { this.requests.drive(p, dt); return; }
     if (p.act === 'huddle') { this.goals.drive(p, dt); return; }
     if (p.act === 'funeral') { this.health.drive(p, dt); return; }
+    if (p.act === 'haul') { this.crew.unload(p, dt); return; }
     if (p.sleepIn && h >= 10) p.sleepIn = false;
     if (p.job && this.jobs.on(p)) { if (p.act) { p.act = ''; p.partner = null; } this.jobs.drive(p, dt); return; }
     if (p.job) { p.wph = ''; if (p.carry && p.bring) { this.deposit(p); p.carry = 0; } }
@@ -417,6 +445,14 @@ export class Group {
       case 'rest': p.pose = 'sit'; return;
       case 'sickbed': p.pose = p.health >= 3 ? 'sleep' : 'sit'; return;
       case 'nap': p.pose = 'sleep'; if ((p.actT -= dt) <= 0) { p.act = ''; p.actT = 1; } return;
+      case 'forage': {
+        // scratching around near camp for anything to eat
+        p.pose = 'search';
+        if ((p.actT -= dt) > 0) return;
+        if (Math.random() < 0.3) { const k = heightAt(this.w, p.x, p.z) < 2 ? 'shell' : 'fruit'; p.haul = [k]; p.carry = 1; p.act = 'haul'; S.say(p, k === 'shell' ? 'Clams! Not much, but something.' : 'Found a few berries.', 2); }
+        else { p.act = ''; p.actT = 1; }
+        return;
+      }
       case 'talk': case 'listen': {
         const o = p.partner;
         if (!o || o.mode !== 'camp' || (p.actT -= dt) <= 0) { p.act = ''; p.partner = null; p.actT = 2 + Math.random() * 3; return; }
@@ -451,6 +487,11 @@ export class Group {
       goTo(rv.x + 1.2, rv.z); S.addRel(p, rv, -4); S.mood(p, 'angry', 15); S.mood(rv, 'angry', 15);
       const calm = camp.find(o => has(o.per, 'calm') && o !== rv);
       if (calm) setTimeout(() => S.say(calm, 'Hey! Both of you, enough.'), 2500);
+    }]);
+    // food running low: free hands go looking for scraps near camp
+    if (this.stock.totalFood < this.people.length * 0.6 && h > 7 && h < 17.5) opts.push([5, () => {
+      p.act = 'forage'; p.actT = 6 + Math.random() * 4;
+      for (let k = 0; k < 6; k++) { const a = Math.random() * 6.28, r = 10 + Math.random() * 16, x = F.x + Math.cos(a) * r, z = F.z + Math.sin(a) * r; if (this.grid.walkable(x, z)) { goTo(x, z); break; } }
     }]);
     const rest = this.goals.active('rest');
     if ((h > 11.5 && h < 14.5) || rest) opts.push([has(p.per, 'lazy') || rest ? 4 : 1, () => { p.act = 'nap'; p.actT = 15 + Math.random() * 15; const s = this.bed(p); goTo(s.x, s.z); }]);
@@ -644,3 +685,6 @@ export class Group {
 }
 
 const WHY: Record<string, string> = { happy: 'Happy right now', angry: 'Angry', worried: 'Worried', sad: 'Upset', scared: 'Scared', fond: 'Enjoying the company', tired: 'Tired', pain: 'In pain', none: '' };
+
+const KEEPSAKES = ['a photo of their kids', 'a wedding ring', 'a wristwatch, stopped at the crash', 'a paperback with the ending torn out', 'a harmonica', 'a lucky coin',
+  'a postcard they never sent', "a child's drawing", 'a rosary', 'a lighter that still works', 'their boarding pass', 'a cassette tape'];

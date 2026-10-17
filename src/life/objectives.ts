@@ -21,7 +21,7 @@ export function objectives(g: Group): Objective[] {
   // the camp's own problems: things to fix
   for (const pr of g.jobs.problems().slice(0, 2)) out.push(pr);
   for (const p of g.people) if (p.hurt && p.mode === 'camp' && !g.camp.has('sickbay') && g.era !== 'crash' && !g.camp.planned('sickbay')) { out.push({ key: 'hurt' + p.id, text: `${p.per.name} is hurt: a sick bay would help` }); break; }
-  if (!g.party.length && g.clock.day <= 2) out.push({ key: 'party', text: 'Click a survivor to bring them along' });
+  if (!g.party.length && !g.crew.out && g.clock.day <= 2) out.push({ key: 'party', text: 'Walk out of camp: your crew comes with you' });
   if (!known('water')) out.push({ key: 'water', text: 'Find fresh water (try following a river)' });
   if (!known('food')) out.push({ key: 'food', text: 'Find food near camp' });
   else if (g.stock.totalFood < n * 0.6) out.push({ key: 'lowfood', text: 'Food is low: find more, or plan a gathering day' });
