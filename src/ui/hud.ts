@@ -1,5 +1,5 @@
 import '@fontsource/press-start-2p';
-import { B, N } from '../world/island';
+import { B, N, World } from '../world/island';
 import type { Game } from '../game';
 import type { WeatherKind } from '../sim/weather';
 import type { Ambience } from '../audio/ambience';
@@ -18,7 +18,19 @@ const CSS = `
 #speed button.on, .btn.on { background: #3b4f9a; border-color: #7d92e0; }
 #mini { top: 14px; right: 14px; border: 3px solid #2b3766; border-radius: 12px; background: #1c4672; box-shadow: 0 3px 0 #0007; cursor: pointer; overflow: hidden; line-height: 0; }
 #mini canvas { image-rendering: pixelated; width: 210px; height: 210px; }
-#gear { top: 240px; right: 14px; }
+#rbtns { top: 240px; right: 14px; display: flex; gap: 6px; }
+.page { position: absolute; z-index: 9; left: 50%; top: 50%; transform: translate(-50%, -50%); font-family: 'Press Start 2P', monospace; color: #f4f1e6; background: #121a33f5; border: 3px solid #2b3766; border-radius: 14px; box-shadow: 0 4px 0 #0008; padding: 16px 20px; display: none; }
+.page.open { display: block; }
+.page h4 { font-size: 11px; margin: 0 0 10px; font-weight: normal; color: #ffd65a; }
+.page .x { position: absolute; right: 14px; top: 12px; cursor: pointer; font-size: 12px; }
+#help { width: min(760px, 94vw); max-height: 84vh; overflow-y: auto; font-size: 8px; line-height: 2; }
+#help h5 { font-size: 9px; color: #ffd65a; margin: 12px 0 4px; font-weight: normal; }
+#help .row { display: flex; gap: 12px; } #help .row b { flex: none; width: 210px; font-weight: normal; color: #9fb0ff; }
+#bigmap .wrap { position: relative; line-height: 0; }
+#bigmap canvas { image-rendering: pixelated; width: min(78vh, 86vw); height: min(78vh, 86vw); border-radius: 8px; cursor: crosshair; }
+#bigmap .ml { position: absolute; transform: translate(-50%, -130%); font: 8px 'Press Start 2P', monospace; color: #fff; text-shadow: 0 2px 0 #000, 0 0 3px #000; white-space: nowrap; pointer-events: none; line-height: 1; }
+#bigmap .ml.r { color: #ffd65a; font-size: 7px; } #bigmap .ml.c { color: #ffdd55; }
+#bigmap .leg { font-size: 7px; opacity: .8; margin-top: 10px; line-height: 1.8; }
 #zoom { top: 116px; left: 222px; display: flex; gap: 6px; align-items: center; }
 #zoom button { font: 10px 'Press Start 2P', monospace; color: #f4f1e6; background: #121a33e6; border: 3px solid #2b3766; border-radius: 10px; padding: 8px 10px; cursor: pointer; }
 #zoom .dots { font-size: 10px; letter-spacing: 2px; text-shadow: 0 2px 0 #000; }
@@ -30,6 +42,35 @@ const CSS = `
 @media (max-width: 1180px) { #hint { display: none; } }
 `;
 
+const row = (a: string, b: string) => `<div class="row"><b>${a}</b><span>${b}</span></div>`;
+const HELP = `
+<h5>CONTROLS (MOUSE ONLY)</h5>
+${row('Click the ground', 'Walk there. Your group follows.')}
+${row('Click a survivor', 'Their card: bring them along, send them scouting, find them.')}
+${row('Click yourself', 'Your group waits here. Click again to call them.')}
+${row('Right-click', 'Whistle: everyone with you comes running.')}
+${row('Stand still', 'Your group spreads out and searches around you.')}
+${row('Drag', 'Look around. The camera follows you again when you walk.')}
+${row('Scroll  or  − / +', 'Zoom in and out.')}
+${row('Q / E', 'Turn the view.')}
+${row('II  1x  2x  4x', 'Pause and game speed (Space pauses too).')}
+<h5>WHAT THE MARKS MEAN</h5>
+${row('<span style="color:#ffd65a">❗</span> over someone', 'They want to talk. Click them to answer, or ignore them and they decide alone.')}
+${row('<span style="color:#ffd65a">?</span> in a yellow ring', 'A rumor. Walk into the ring to see if it is true. Some people lie.')}
+${row('<span style="color:#ff5a4a">!</span> in a red ring', 'Someone is lost or hurt out there. Go and find them.')}
+${row('Dotted trail', "A scout's path. Click it to follow them with the camera.")}
+${row('Faces', '😊 happy · 😠 angry · 😟 worried · 😢 sad or hungry · 😨 scared · 💤 tired · ❤ fond · 🤕 hurt')}
+<h5>HOW THE DAY WORKS</h5>
+${row('Morning', 'Three people suggest a plan. Pick one; the camp works on it all day. Time slows while you choose.')}
+${row('Daytime', 'People gather food and water on their own, and come to you with ideas. Some ideas are bad: watch how they ask.')}
+${row('Evening', 'Everyone eats from the pile by the fire. Not enough food = hungry, unhappy people.')}
+${row('Night', 'Everyone sits at the fire and talks. Secrets slip out. Out in the dark, your group gets nervous.')}
+<h5>WORDS</h5>
+${row('Trust', 'Loyal › Trusts you › Unsure › Doubts you › Against you')}
+${row('Food / water', 'Plenty › Enough › Low › Out')}
+${row('GOALS box', 'What to do next. Click a goal with ⌖ to look there.')}
+`;
+
 const BIOME_RGB: Record<number, number[]> = {
   [B.Ocean]: [28, 82, 145], [B.Beach]: [236, 216, 160], [B.Grass]: [108, 182, 84], [B.Jungle]: [44, 110, 52], [B.Highland]: [150, 150, 112], [B.Volcanic]: [110, 100, 94],
   [B.Swamp]: [70, 96, 64], [B.Bamboo]: [128, 178, 74], [B.Flowers]: [196, 172, 112], [B.TideRock]: [118, 118, 114], [B.Dirt]: [164, 136, 88], [B.Reef]: [96, 210, 200], [B.Lagoon]: [92, 206, 204], [B.Lake]: [70, 150, 220],
@@ -37,6 +78,7 @@ const BIOME_RGB: Record<number, number[]> = {
 
 export class Hud {
   private clockEl: HTMLElement; private wxEl: HTMLElement; private zoomEl: HTMLElement;
+  private help: HTMLElement; private big: HTMLElement; private bigBase: ImageData; private bigT = 0;
   private mini: HTMLCanvasElement; private miniBase: ImageData; private miniDim: ImageData; private dimVer = -1; private dimT = 0;
   constructor(private game: Game, audio: Ambience) {
     const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
@@ -55,7 +97,7 @@ export class Hud {
 
     const miniWrap = el('<div id="mini" class="hud"><canvas width="192" height="192"></canvas></div>');
     this.mini = miniWrap.querySelector('canvas')!;
-    this.miniBase = this.buildMinimap();
+    this.miniBase = mapImage(game.world, 192);
     this.miniDim = new ImageData(new Uint8ClampedArray(this.miniBase.data), 192, 192);
     miniWrap.addEventListener('pointerdown', e => {
       const r = this.mini.getBoundingClientRect(), x = ((e.clientX - r.left) / r.width) * N, z = ((e.clientY - r.top) / r.height) * N;
@@ -74,7 +116,24 @@ export class Hud {
       miniWrap.title = best;
     });
 
-    const gear = el('<button id="gear" class="hud btn">⚙ SETTINGS</button>');
+    const rb = el('<div id="rbtns" class="hud"><button class="btn" data-b="map">MAP</button><button class="btn" data-b="help">?</button><button id="gear" class="btn">⚙ SETTINGS</button></div>');
+    const gear = rb.querySelector('#gear') as HTMLElement;
+    this.help = el(`<div id="help" class="page"><div class="x">✕</div><h4>HOW TO PLAY</h4>${HELP}</div>`);
+    this.big = el('<div id="bigmap" class="page"><div class="x">✕</div><h4>THE ISLAND — click anywhere to look there</h4><div class="wrap"><canvas width="384" height="384"></canvas></div><div class="leg">◆ PLACE &nbsp; ~ WATER &nbsp; ✱ FOOD &nbsp; <span style="color:#ffd65a">? RUMOR</span> &nbsp; <span style="color:#ff5a4a">! TROUBLE</span> &nbsp; <span style="color:#8af07a">■ YOUR GROUP</span> &nbsp; <span style="color:#ffa040">■ SCOUT</span> &nbsp; □ YOU</div></div>');
+    this.bigBase = mapImage(game.world, 384);
+    const close = () => { this.help.classList.remove('open'); this.big.classList.remove('open'); };
+    for (const pg of [this.help, this.big]) (pg.querySelector('.x') as HTMLElement).onclick = close;
+    rb.querySelectorAll('[data-b]').forEach(b => b.addEventListener('click', () => {
+      const pg = (b as HTMLElement).dataset.b === 'map' ? this.big : this.help, o = !pg.classList.contains('open');
+      close(); if (o) { pg.classList.add('open'); if (pg === this.big) this.drawBig(); }
+    }));
+    addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    const bc = this.big.querySelector('canvas')!;
+    bc.addEventListener('click', e => {
+      const r = bc.getBoundingClientRect(), x = ((e.clientX - r.left) / r.width) * N, z = ((e.clientY - r.top) / r.height) * N;
+      if (game.group.scoutPick) game.group.clickGround(x, z); else { game.rig.jumpTo(x, z); game.rig.followOn = false; }
+      close();
+    });
     const panel = el(`<div id="panel" class="hud">
       <label>Outlines <input id="o-filter" type="checkbox"></label>
       <label>Texture grain <select id="o-grain"><option value="0">Smooth</option><option value="0.35">Soft</option><option value="0.65">Medium</option><option value="1">Classic</option></select></label>
@@ -107,20 +166,10 @@ export class Hud {
     document.querySelectorAll('.hud').forEach(e => e.addEventListener('pointerdown', (ev: Event) => ev.stopPropagation()));
   }
 
-  private buildMinimap() {
-    const w = this.game.world, S = 192, k = N / S, g = this.mini.getContext('2d')!, img = g.createImageData(S, S);
-    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-      const i = Math.floor(y * k + k / 2) * N + Math.floor(x * k + k / 2), h = w.h[i], b = w.biome[i];
-      let c = BIOME_RGB[b] ?? [255, 0, 255];
-      if (b === B.Ocean) c = h > -1.5 ? [58, 150, 190] : h > -5 ? [36, 108, 168] : c;
-      const hn = w.h[Math.max(0, i - N * 2 - 2)], sh = b === B.Ocean || b === B.Lagoon || b === B.Reef ? 1 : Math.max(0.7, Math.min(1.25, 1 + (h - hn) * 0.12));
-      const o = (y * S + x) * 4; img.data[o] = c[0] * sh; img.data[o + 1] = c[1] * sh; img.data[o + 2] = c[2] * sh; img.data[o + 3] = 255;
-    }
-    for (const r of w.rivers) for (const p of r.pts) { const o = ((p.z / k | 0) * S + (p.x / k | 0)) * 4; img.data[o] = 80; img.data[o + 1] = 170; img.data[o + 2] = 230; }
-    return img;
-  }
+
 
   update() {
+    if (this.big.classList.contains('open') && (this.bigT -= 1 / 60) <= 0) { this.bigT = 0.5; this.drawBig(); }
     const g = this.game, c = g.clock, wx = g.weather;
     const night = c.night > 0.5, h = c.hour;
     const dots = ZOOMS.map((_, i) => i === g.rig.zoomI ? '●' : '○').join('');
@@ -163,7 +212,50 @@ export class Hud {
     m.moveTo(ps[0][0], ps[0][1]); for (const p of ps.slice(1)) m.lineTo(p[0], p[1]); m.closePath(); m.stroke();
     const cr = g.world.crash; m.fillStyle = '#ffdd55'; m.fillRect(cr.x * k - 1.5, cr.z * k - 1.5, 3, 3);
   }
+
+  /** The full island map: what you know, where everyone is, every name. */
+  private drawBig() {
+    const G = this.game, g = G.group, d = g.disc, S = 384, k = S / N, cv = this.big.querySelector('canvas')!, m = cv.getContext('2d')!;
+    const img = new ImageData(new Uint8ClampedArray(this.bigBase.data), S, S), ex = d.explored;
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (!ex[(y >> 1) * MAP + (x >> 1)]) { const o = (y * S + x) * 4; img.data[o] *= 0.5; img.data[o + 1] *= 0.5; img.data[o + 2] *= 0.55; }
+    m.putImageData(img, 0, 0);
+    for (const tr of g.scouting.trips) { m.fillStyle = '#ffd08a'; for (const q of tr.trail) m.fillRect(q.x * k - 0.5, q.z * k - 0.5, 1.5, 1.5); }
+    for (const mk of d.markers) { m.strokeStyle = mk.kind === '!' ? '#ff5a4a' : '#ffd65a'; m.lineWidth = 2; m.setLineDash([3, 3]); m.beginPath(); m.arc(mk.x * k, mk.z * k, Math.max(5, mk.r * k), 0, 6.283); m.stroke(); m.setLineDash([]); }
+    for (const p of d.pois) if (p.known) {
+      const x = p.x * k, y = p.z * k;
+      if (p.major) { m.fillStyle = '#000'; m.beginPath(); m.moveTo(x, y - 6); m.lineTo(x + 6, y); m.lineTo(x, y + 6); m.lineTo(x - 6, y); m.fill(); m.fillStyle = '#fff'; m.beginPath(); m.moveTo(x, y - 4); m.lineTo(x + 4, y); m.lineTo(x, y + 4); m.lineTo(x - 4, y); m.fill(); }
+      else { m.fillStyle = '#000'; m.fillRect(x - 3, y - 3, 6, 6); m.fillStyle = p.kind === 'water' ? '#7fd8ff' : '#8af07a'; m.fillRect(x - 2, y - 2, 4, 4); }
+    }
+    for (const p of g.people) {
+      if (p === g.leader || p.mode === 'asleep') continue;
+      m.fillStyle = p.mode === 'scout' ? '#ffa040' : p.mode === 'lost' || p.mode === 'hurt' ? '#ff5a4a' : p.mode === 'camp' ? '#d8d8d8' : '#8af07a';
+      m.fillRect(p.x * k - 1.5, p.z * k - 1.5, 3, 3);
+    }
+    const f = g.fire; m.fillStyle = '#000'; m.fillRect(f.x * k - 4, f.z * k - 4, 8, 8); m.fillStyle = '#ffdd55'; m.fillRect(f.x * k - 3, f.z * k - 3, 6, 6);
+    const L = g.leader; if (L) { m.fillStyle = '#000'; m.fillRect(L.x * k - 4, L.z * k - 4, 8, 8); m.fillStyle = '#fff'; m.fillRect(L.x * k - 2, L.z * k - 2, 4, 4); }
+    // names as text over the canvas
+    const wrap = this.big.querySelector('.wrap') as HTMLElement;
+    wrap.querySelectorAll('.ml').forEach(e => e.remove());
+    const r = cv.getBoundingClientRect(), sc = r.width / N;
+    const lab = (t: string, x: number, z: number, cls = '') => { const e = document.createElement('div'); e.className = 'ml ' + cls; e.textContent = t; e.style.left = `${x * sc}px`; e.style.top = `${z * sc}px`; wrap.appendChild(e); };
+    for (const p of d.pois) if (p.known && p.major) { const t = d.display(p); lab(t.charAt(0).toUpperCase() + t.slice(1), p.x, p.z); }
+    for (const mk of d.markers) lab(mk.kind === '!' ? mk.text : '? ' + mk.text, mk.x, mk.z, 'r');
+    lab('Camp', f.x, f.z, 'c');
+  }
 }
 
+/** The island as a picture, S×S pixels: biome colors, a little hill shading, rivers. */
+export function mapImage(w: World, S: number) {
+    const k = N / S, img = new ImageData(S, S);
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const i = Math.floor(y * k + k / 2) * N + Math.floor(x * k + k / 2), h = w.h[i], b = w.biome[i];
+      let c = BIOME_RGB[b] ?? [255, 0, 255];
+      if (b === B.Ocean) c = h > -1.5 ? [58, 150, 190] : h > -5 ? [36, 108, 168] : c;
+      const hn = w.h[Math.max(0, i - N * 2 - 2)], sh = b === B.Ocean || b === B.Lagoon || b === B.Reef ? 1 : Math.max(0.7, Math.min(1.25, 1 + (h - hn) * 0.12));
+      const o = (y * S + x) * 4; img.data[o] = c[0] * sh; img.data[o + 1] = c[1] * sh; img.data[o + 2] = c[2] * sh; img.data[o + 3] = 255;
+    }
+    for (const r of w.rivers) for (const p of r.pts) { const o = ((p.z / k | 0) * S + (p.x / k | 0)) * 4; img.data[o] = 80; img.data[o + 1] = 170; img.data[o + 2] = 230; }
+    return img;
+  }
 function localStorageGet(k: string) { try { return localStorage.getItem('island.' + k); } catch { return null; } }
 function localStorageSet(k: string, v: string) { try { localStorage.setItem('island.' + k, v); } catch { /* private mode */ } }

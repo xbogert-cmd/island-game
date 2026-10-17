@@ -41,9 +41,14 @@ const CSS = `
 .panel { right: 14px; top: 286px; width: 330px; max-height: 55vh; overflow-y: auto; padding: 12px; font-size: 8px; line-height: 1.8; display: none; }
 .panel.open { display: block; }
 .panel h4 { font-size: 10px; margin: 0 0 8px; font-weight: normal; color: #ffd65a; }
-#roster .r { display: flex; gap: 8px; align-items: center; padding: 4px; border-radius: 8px; cursor: pointer; }
-#roster .r:hover { background: #24305c; }
-#roster canvas { image-rendering: pixelated; width: 20px; height: 26px; }
+#roster { left: 50%; top: 50%; right: auto; transform: translate(-50%, -50%); width: min(1060px, 94vw); max-height: 82vh; padding: 16px 18px; z-index: 8; }
+#roster .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+#roster .r { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 2px solid #2b3766; border-radius: 10px; cursor: pointer; line-height: 1.8; }
+#roster .r:hover { background: #24305c; border-color: #ffd65a; }
+#roster canvas { image-rendering: pixelated; width: 40px; height: 52px; flex: none; }
+#roster .nm { font-size: 10px; } #roster .nm span { font-size: 7px; opacity: .7; }
+#roster .g { color: #8af07a; } #roster .b { color: #ff8a7a; } #roster .k { color: #ffd65a; } #roster .dim { opacity: .7; }
+#roster .x { position: absolute; right: 14px; top: 12px; cursor: pointer; font-size: 12px; }
 #journal .d { color: #ffd65a; margin-top: 8px; }
 #journal p { margin: 2px 0 6px; }
 #pick { inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: #0b102066; }
@@ -276,17 +281,38 @@ export class Social {
     if (!list.length) party.innerHTML = '<div style="font-size:7px;opacity:.6;padding:8px;line-height:1.7">Click a survivor<br>to bring them</div>';
   }
 
+  /** Everyone at a glance: what they're good and bad at, what you've learned about them, how they feel about you. */
   private fillRoster() {
-    const g = this.game.group, key = g.people.map(p => p.mode + p.mood + p.ask + trustWord(p.per.trust)).join();
+    const g = this.game.group, S = g.story;
+    const key = g.people.map(p => p.mode + p.mood + p.ask + trustWord(p.per.trust) + S.skillKnown.has(p.id) + S.secretKnown.has(p.id) + JSON.stringify(g.requests.record.get(p.id) ?? '')).join();
     if (key === this.rosterKey) return;
     this.rosterKey = key;
-    this.roster.innerHTML = `<h4>SURVIVORS (${g.people.length})</h4>`;
-    for (const p of g.people) {
-      const where = { asleep: 'asleep', camp: 'at camp', leader: 'you', follow: 'with you', wait: 'waiting', scout: 'scouting', lost: 'LOST', hurt: 'HURT', rescued: 'with you' }[p.mode];
-      const r = this.el(`<div class="r"><div style="flex:1">${p.per.name} ${p.ask ? '❗' : MOOD_TXT[p.mood]}<br><span style="opacity:.7">${where}${p === g.leader ? '' : ' · ' + trustWord(p.per.trust)}</span></div></div>`, this.roster);
+    const esc = (t: string) => t.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
+    this.roster.innerHTML = `<div class="x">✕</div><h4>SURVIVORS (${g.people.length}) — click someone for more</h4><div class="grid"></div>`;
+    (this.roster.querySelector('.x') as HTMLElement).onclick = () => this.roster.classList.remove('open');
+    const grid = this.roster.querySelector('.grid') as HTMLElement;
+    const order = [g.leader!, ...g.people.filter(p => p !== g.leader)];
+    for (const p of order) {
+      const per = p.per, isL = p === g.leader;
+      const where = { asleep: 'asleep', camp: 'at camp', leader: 'leading', follow: 'with you', wait: 'waiting', scout: 'scouting', lost: 'LOST', hurt: 'HURT', rescued: 'with you' }[p.mode];
+      const skill = S.skillKnown.has(p.id) ? SKILL_LABEL[per.skill] : '???';
+      const secret = per.secret && S.secretKnown.has(p.id) ? SECRET_LABEL[per.secret] : '';
+      const pair = per.pair >= 0 ? g.people[per.pair] : null, fr = S.friend(p), rv = S.rival(p), rec = g.requests.record.get(p.id);
+      const ties = [pair && `Came with ${esc(pair.per.name)}`, fr && fr !== pair && `Friend: ${esc(fr.per.name)}`, rv && `Rival: ${esc(rv.per.name)}`].filter(Boolean).join(' · ');
+      const html = `<div style="flex:1">
+        <div class="nm">${esc(per.name)} <span>${per.age}${isL ? ' · YOU' : ''}</span> ${p.ask ? '❗' : MOOD_TXT[p.mood]}</div>
+        <div class="dim">${where}${isL ? '' : ` · <span class="k">${trustWord(per.trust)}</span>`}${p.hurt ? ' · hurt' : ''}${p.hungry ? ' · hungry' : ''}</div>
+        <div class="dim">"${esc(per.backstory)}"</div>
+        <div>${per.traits.map(cap).join(' · ')}</div>
+        <div><span class="g">+ ${cap(per.strength)}</span> &nbsp; <span class="b">− ${cap(per.weakness)}</span></div>
+        <div><span class="k">Skill</span> ${skill}${secret ? ` &nbsp; <span class="k">Secret</span> ${secret}` : ''}</div>
+        ${ties ? `<div class="dim">${ties}</div>` : ''}
+        ${rec ? `<div class="dim">Ideas: ${rec.good} worked · ${rec.bad} didn't</div>` : ''}
+      </div>`;
+      const r = this.el(`<div class="r">${html}</div>`, grid);
       r.prepend(this.portrait(p));
       // clicking a scout also follows them with the camera
-      r.onclick = () => { this.openCard(p); if (p.mode === 'scout' || p.mode === 'lost' || p.mode === 'hurt') { this.game.camWho = p; this.game.rig.followOn = true; } };
+      r.onclick = () => { this.roster.classList.remove('open'); this.openCard(p); if (p.mode === 'scout' || p.mode === 'lost' || p.mode === 'hurt') { this.game.camWho = p; this.game.rig.followOn = true; } };
     }
   }
 
@@ -357,13 +383,13 @@ export class Social {
     this.askEl.style.left = `${Math.max(160, Math.min(innerWidth - 160, s.x))}px`; this.askEl.style.top = `${Math.max(120, s.y - 28 * z)}px`;
   }
 
-  /** Morning plan: three cards, one click. Nobody picks in 20 s → the most trusted idea wins. */
+  /** Morning plan: three cards, one click. Time crawls while they are up; nobody picks in 30 s → the most trusted idea wins. */
   private drawGoal(dt: number) {
     const G = this.game.group.goals, opts = G.opts;
     if (!opts.length) { if (this.goalKey) { this.goalKey = ''; this.goalEl.classList.remove('open'); } return; }
     const key = opts.map(o => o.who.id + o.title).join();
     if (key !== this.goalKey) {
-      this.goalKey = key; this.goalT = 20;
+      this.goalKey = key; this.goalT = 30;
       this.goalEl.innerHTML = '<h2>WHAT DO WE DO TODAY?</h2><div class="cards box" style="background:none;border:0;box-shadow:none"></div><div class="bar"><i></i></div>';
       const cards = this.goalEl.querySelector('.cards') as HTMLElement;
       opts.forEach((o, i) => {
@@ -377,6 +403,6 @@ export class Social {
       this.goalEl.classList.add('open');
     }
     if (this.game.clock.speed > 0 && (this.goalT -= dt) <= 0) G.autoPick();
-    (this.goalEl.querySelector('.bar i') as HTMLElement).style.width = `${Math.max(0, this.goalT / 20) * 100}%`;
+    (this.goalEl.querySelector('.bar i') as HTMLElement).style.width = `${Math.max(0, this.goalT / 30) * 100}%`;
   }
 }

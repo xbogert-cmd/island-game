@@ -174,7 +174,9 @@ const DEFS: Record<string, { frames: string[][]; outline?: boolean }> = {
   pFish: { frames: [['.SSS.S', 'SeSSSS', '.SSS.S']] },
   pJug: { frames: [['.g.', 'bSb', 'bbb', 'bbb']] },
   pSnack: { frames: [['WbW', 'bwb', 'WbW']] },
-  askMark: { frames: [['.yy.', 'yzzy', '.yy.', '.yy.', '....', '.yy.']] },
+  askMark: { frames: [
+    ['.yyyyy.', 'yyzzzyy', 'yyzzzyy', 'yyzzzyy', '.yzzzy.', '..yzy..', '.......', '..yyy..', '..yzy..', '..yyy..'],
+    ['.ooooo.', 'oozzzoo', 'oozzzoo', 'oozzzoo', '.ozzzo.', '..ozo..', '.......', '..ooo..', '..ozo..', '..ooo..']] },
   // things people build
   signalFire: { frames: [['.....n.....', '....nNn....', '...nN.Nn...', '..nN...Nn..', '.nN.....Nn.', 'nNnnnnnnnNn']] },
   dryingRack: { frames: [['nnnnnnnnnn', 'n.S..S..Sn', 'n.S..S..Sn', 'n.e..e..en', 'n........n', 'n........n']] },

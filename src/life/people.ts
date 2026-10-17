@@ -219,8 +219,9 @@ export class Survivors {
       }
       const icon = MOOD_ICON[p.mood];
       if (p.ask) {
-        const bob = Math.sin(p.anim * 6) > 0 ? 1 : 0;
-        main.push(p.x, y + (SH - FEET + 17 + bob - lift) * this.yUp, p.z, ATLAS.askMark[0], false, 1, 1, 1, 2);
+        // big, glowing, pulsing: hard to miss
+        const bob = Math.round(Math.abs(Math.sin(p.anim * 4)) * 3), fr = Math.floor(p.anim * 3) % 2;
+        main.push(p.x, y + (SH - FEET + 16 + bob - lift) * this.yUp, p.z, ATLAS.askMark[fr], false, 1, 1, 1, 2);
       } else if (icon && p.pose !== 'sleep') {
         const bob = Math.sin(p.anim * 3) > 0 ? 1 : 0, fr2 = ATLAS[icon][Math.floor(p.anim * 2) % ATLAS[icon].length];
         main.push(p.x, y + (SH - FEET + 16 + bob - lift + (p.pose === 'sit' ? -2 : p.pose === 'search' || p.pose === 'collect' ? -3 : 0)) * this.yUp, p.z, fr2, false, 1, 1, 1, 2);

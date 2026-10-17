@@ -242,7 +242,7 @@ export class Group {
   update(dt: number) {
     const L = this.leader;
     if (this.slowT > 0) { this.slowT -= dt / Math.max(0.05, this.timeScale); if (this.slowT <= 0) this.focus = null; }
-    this.timeScale = this.slowT > 0 ? 0.3 : 1;
+    this.timeScale = this.slowT > 0 ? 0.3 : this.goals.opts.length ? 0.12 : 1;     // the morning plan waits for you
     const night = this.clock.night > 0.5, rain = this.weather.rain;
     for (const p of this.people) { p.anim += dt; if (p.moodT > 0) p.moodT -= dt; if (p.poseT > 0 && (p.poseT -= dt) <= 0) p.poseO = null; }
     if (!L) { for (const p of this.people) p.pose = 'sleep'; this.story.update(dt); return; }
