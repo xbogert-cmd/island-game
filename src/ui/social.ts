@@ -59,6 +59,25 @@ const CSS = `
 .bub { position: absolute; z-index: 4; transform: translate(-50%, -100%); background: #fffbea; color: #1c1626; font: 8px/1.5 'Press Start 2P', monospace; padding: 6px 8px; border: 2px solid #1c1626; border-radius: 8px; max-width: 220px; text-align: center; pointer-events: none; }
 .bub:after { content: ''; position: absolute; left: 50%; bottom: -7px; margin-left: -5px; border: 5px solid transparent; border-top-color: #1c1626; border-bottom: 0; }
 .lbl { position: absolute; z-index: 3; transform: translate(-50%, -100%); font: 8px 'Press Start 2P', monospace; color: #fff; text-shadow: 0 2px 0 #000, 0 0 4px #000; pointer-events: none; white-space: nowrap; }
+.lbl.map { font-size: 9px; background: #121a33cc; border: 2px solid #2b3766; border-radius: 8px; padding: 5px 7px; text-shadow: none; }
+.lbl.map:after { content: ''; position: absolute; left: 50%; bottom: -8px; margin-left: -1px; width: 2px; height: 6px; background: #2b3766; }
+.lbl.rum { color: #ffd65a; font-size: 7px; }
+.ask { position: absolute; z-index: 7; transform: translate(-50%, -100%); background: #fffbea; color: #1c1626; font: 8px/1.7 'Press Start 2P', monospace; padding: 10px 12px; border: 3px solid #1c1626; border-radius: 10px; width: 300px; text-align: center; box-shadow: 0 3px 0 #0006; }
+.ask:after { content: ''; position: absolute; left: 50%; bottom: -9px; margin-left: -7px; border: 7px solid transparent; border-top-color: #1c1626; border-bottom: 0; }
+.ask .who { color: #8a5a20; margin-bottom: 4px; }
+.ask .acts { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+.ask .x { position: absolute; right: 6px; top: 2px; cursor: pointer; }
+#goal { left: 50%; top: 70px; transform: translateX(-50%); display: none; flex-direction: column; align-items: center; gap: 8px; }
+#goal.open { display: flex; }
+#goal h2 { font-size: 11px; font-weight: normal; margin: 0; text-shadow: 0 2px 0 #000; }
+#goal .cards { display: flex; gap: 10px; }
+#goal .c { width: 190px; padding: 10px; font-size: 7px; line-height: 1.8; cursor: pointer; transition: transform .15s; text-align: center; }
+#goal .c:hover { transform: translateY(-4px); border-color: #ffd65a; }
+#goal .c canvas { image-rendering: pixelated; width: 40px; height: 52px; display: block; margin: 0 auto 4px; }
+#goal .c h3 { font-size: 9px; color: #ffd65a; margin: 0 0 4px; font-weight: normal; }
+#goal .bar { width: 300px; height: 6px; background: #121a33; border: 2px solid #2b3766; border-radius: 4px; overflow: hidden; }
+#goal .bar i { display: block; height: 100%; background: #ffd65a; }
+#today { left: 14px; top: 160px; font-size: 8px; padding: 8px 12px; line-height: 1.9; display: none; }
 `;
 
 const MOOD_TXT: Record<string, string> = { none: '', happy: '😊', angry: '😠', worried: '😟', sad: '😢', scared: '😨', tired: '💤', fond: '❤', pain: '🤕' };
@@ -70,7 +89,9 @@ export class Social {
   private lead: HTMLElement; private card: HTMLElement; private roster: HTMLElement; private journal: HTMLElement;
   private toastsEl: HTMLElement; private tip: HTMLElement; private title: HTMLElement; private nameBox: HTMLElement;
   private bubbles = new Map<object, HTMLElement>();
-  private labels = new Map<number, HTMLElement>();
+  private labels = new Map<string, HTMLElement>();
+  private askEl: HTMLElement; private askKey = ''; private askOpen = false;
+  private goalEl: HTMLElement; private goalKey = ''; private goalT = 0; private todayEl: HTMLElement;
   private cardP: Person | null = null; private cardKey = ''; private partyKey = ''; private rosterKey = '';
   private tipT = 0; private momentT = 0; private refreshT = 0; private journalN = -1;
   private toastQ: { el: HTMLElement; t: number }[] = [];
@@ -85,6 +106,9 @@ export class Social {
     this.tip = this.el('<div id="tip" class="so box" style="opacity:0"></div>');
     this.title = this.el('<div id="title" class="so"></div>');
     this.nameBox = this.el('<div id="name" class="so box"></div>');
+    this.askEl = this.el('<div class="ask so" style="display:none"></div>');
+    this.goalEl = this.el('<div id="goal" class="so"></div>');
+    this.todayEl = this.el('<div id="today" class="so box"></div>');
     this.lead.style.display = 'none';
     (this.lead.querySelector('.me') as HTMLElement).onclick = () => { game.camWho = null; game.rig.followOn = true; };
     this.lead.querySelectorAll('.btns button').forEach(b => (b as HTMLElement).onclick = () => this.toggle((b as HTMLElement).dataset.a === 'roster' ? this.roster : this.journal));
@@ -117,13 +141,17 @@ export class Social {
   private toggle(e: HTMLElement) { const o = !e.classList.contains('open'); this.roster.classList.remove('open'); this.journal.classList.remove('open'); if (o) { e.classList.add('open'); this.journalN = -1; this.rosterKey = ''; this.refreshT = 0; } }
   private closeCard() { this.card.classList.remove('open'); this.cardP = null; this.cardKey = ''; }
 
-  openCard(p: Person) { this.cardP = p; this.card.classList.add('open'); this.fillCard(); }
+  openCard(p: Person) {
+    if (this.game.group.requests.cur?.p === p) { this.askOpen = true; this.askKey = ''; return; }
+    this.cardP = p; this.card.classList.add('open'); this.fillCard();
+  }
 
   private fillCard() {
     const p = this.cardP!, g = this.game.group, S = g.story, per = p.per, isL = p === g.leader;
     const pair = per.pair >= 0 ? g.people[per.pair] : null, fr = S.friend(p), rv = S.rival(p);
     const skill = S.skillKnown.has(p.id) ? SKILL_LABEL[per.skill] : '???';
     const secret = per.secret && S.secretKnown.has(p.id) ? SECRET_LABEL[per.secret] : '';
+    const rec = g.requests.record.get(p.id);
     const where = { asleep: 'Asleep', camp: 'At camp', leader: 'Leading', follow: 'With you', wait: 'Waiting for you', scout: 'Out scouting', lost: 'Lost!', hurt: 'Hurt, out there!', rescued: 'Coming home with you' }[p.mode];
     const html = `<div class="x">✕</div><div class="hd"><div class="pc"></div><div style="flex:1">
       <h3>${per.name} <span style="font-size:8px;opacity:.7">${per.age}${isL ? ' · YOU' : ''}</span></h3>
@@ -132,11 +160,13 @@ export class Social {
       <div class="row"><b>Traits</b> ${per.traits.map(cap).join(' · ')}</div>
       <div class="row"><b>+</b> ${cap(per.strength)} &nbsp; <b>−</b> ${cap(per.weakness)}</div>
       <div class="row"><b>Skill</b> ${skill}${secret ? ` &nbsp; <b>Secret</b> ${secret}` : ''}</div>
-      <div class="row"><b>Now</b> ${where} ${MOOD_TXT[p.mood]} ${p.why}</div>
+      <div class="row"><b>Now</b> ${where} ${MOOD_TXT[p.mood]} ${p.why}${p.ask ? ' · <b>❗ wants to talk</b>' : ''}</div>
+      ${rec ? `<div class="row"><b>Ideas</b> ${rec.good} worked · ${rec.bad} didn't</div>` : ''}
       ${isL ? '' : `<div class="row"><b>Trust in you</b> ${trustWord(per.trust)}</div>`}
       <div class="row">${fr ? `<b>Friend</b> ${fr.per.name} &nbsp; ` : ''}${rv ? `<b>Rival</b> ${rv.per.name}` : ''}</div>
       </div></div><div class="acts"></div>`;
     const btns: [string, string, () => void][] = [];
+    if (p.ask) btns.push(['HEAR THEM OUT', 'go', () => { this.closeCard(); this.openCard(p); }]);
     if (!isL && p.mode === 'camp') btns.push([g.party.length >= PARTY_MAX ? 'GROUP FULL' : 'COME WITH ME', 'go', () => g.invite(p)]);
     if (p.mode === 'follow' || p.mode === 'wait') btns.push(['GO BACK TO CAMP', '', () => g.dismiss(p)]);
     if (!isL && (p.mode === 'camp' || p.mode === 'follow' || p.mode === 'wait')) btns.push(['GO SCOUT', '', () => { g.askScout(p); if (g.scoutPick === p) { this.closeCard(); this.showTip(`Click where ${per.name} should scout. Right-click to cancel.`, 99); } }]);
@@ -187,6 +217,8 @@ export class Social {
     if (this.momentT > 0) { if ((this.momentT -= dt) <= 0) this.title.style.opacity = '0'; } else if (g.moments.length) this.moment();
     this.drawBubbles();
     this.drawLabels();
+    this.drawAsk();
+    this.drawGoal(dt);
     if ((this.refreshT -= dt) > 0 || !g.leader) return;
     this.refreshT = 0.5;
     // leader + party strip
@@ -195,9 +227,13 @@ export class Social {
     mx.clearRect(0, 0, SW, SH); mx.drawImage(this.portrait(L), 0, 0);
     (this.lead.querySelector('.nm') as HTMLElement).textContent = L.per.name.toUpperCase();
     (this.lead.querySelector('.sub') as HTMLElement).innerHTML = `Group: ${trustWord(S.avgTrust(L))}<br>${g.party.length}/${PARTY_MAX} with you`;
+    const st = g.stock, n = g.people.length, cur = g.goals.cur;
+    this.todayEl.style.display = 'block';
+    const tw = `${cur ? `TODAY: ${cur.title}<br>` : g.goals.opts.length ? 'TODAY: DECIDING...<br>' : ''}FOOD: ${st.word(st.totalFood, n)} · WATER: ${st.word(st.water, n)}${st.ration ? ' · HALF RATIONS' : ''}`;
+    if (this.todayEl.innerHTML !== tw) this.todayEl.innerHTML = tw;
     const party = this.lead.querySelector('.party') as HTMLElement;
     const list = [...g.party, ...g.people.filter(p => p.mode === 'rescued'), ...g.scouts];
-    const pk = list.map(p => p.id + p.mode + p.mood).join() + Math.round(game.rig.yaw * 2);
+    const pk = list.map(p => p.id + p.mode + p.mood + p.ask).join() + Math.round(game.rig.yaw * 2);
     if (pk !== this.partyKey) this.fillParty(party, list, pk);
     if (this.cardP && this.card.classList.contains('open')) this.fillCard();
     if (this.roster.classList.contains('open')) this.fillRoster();
@@ -215,22 +251,23 @@ export class Social {
         const tr = g.scouting.tripOf(p);
         if (p.mode !== 'scout') tag.textContent = '❗';
         else if (tr) { const a = Math.atan2(tr.dir.z, tr.dir.x) + yaw; tag.innerHTML = `<span style="display:inline-block;transform:rotate(${a}rad)">➜</span>`; e.title += ` · scouting ${dirName(tr.dir.x, tr.dir.z)}`; }
-      } else tag.textContent = p.mode === 'wait' ? '⏸' : MOOD_TXT[p.mood];
+      } else tag.textContent = p.ask ? '❗' : p.mode === 'wait' ? '⏸' : MOOD_TXT[p.mood];
       e.onclick = () => this.openCard(p);
     }
     if (!list.length) party.innerHTML = '<div style="font-size:7px;opacity:.6;padding:8px;line-height:1.7">Click a survivor<br>to bring them</div>';
   }
 
   private fillRoster() {
-    const g = this.game.group, key = g.people.map(p => p.mode + p.mood + trustWord(p.per.trust)).join();
+    const g = this.game.group, key = g.people.map(p => p.mode + p.mood + p.ask + trustWord(p.per.trust)).join();
     if (key === this.rosterKey) return;
     this.rosterKey = key;
     this.roster.innerHTML = `<h4>SURVIVORS (${g.people.length})</h4>`;
     for (const p of g.people) {
       const where = { asleep: 'asleep', camp: 'at camp', leader: 'you', follow: 'with you', wait: 'waiting', scout: 'scouting', lost: 'LOST', hurt: 'HURT', rescued: 'with you' }[p.mode];
-      const r = this.el(`<div class="r"><div style="flex:1">${p.per.name} ${MOOD_TXT[p.mood]}<br><span style="opacity:.7">${where}${p === g.leader ? '' : ' · ' + trustWord(p.per.trust)}</span></div></div>`, this.roster);
+      const r = this.el(`<div class="r"><div style="flex:1">${p.per.name} ${p.ask ? '❗' : MOOD_TXT[p.mood]}<br><span style="opacity:.7">${where}${p === g.leader ? '' : ' · ' + trustWord(p.per.trust)}</span></div></div>`, this.roster);
       r.prepend(this.portrait(p));
-      r.onclick = () => this.openCard(p);
+      // clicking a scout also follows them with the camera
+      r.onclick = () => { this.openCard(p); if (p.mode === 'scout' || p.mode === 'lost' || p.mode === 'hurt') { this.game.camWho = p; this.game.rig.followOn = true; } };
     }
   }
 
@@ -256,16 +293,71 @@ export class Social {
     for (const [k, e] of this.bubbles) if (!seen.has(k)) { e.remove(); this.bubbles.delete(k); }
   }
 
+  /**
+   * Place names. Zoomed all the way out: every known place, map-style. Closer in: only what you are near.
+   * Rumors get a short line under their "?".
+   */
   private drawLabels() {
-    const g = this.game.group, w = this.game.world, t = this.game.rig.target, R = this.game.viewR;
+    const g = this.game.group, w = this.game.world, t = this.game.rig.target, R = this.game.viewR, zi = this.game.rig.zoomI, seen = new Set<string>();
+    const inView = (x: number, z: number) => Math.abs(x - t.x) < R * 1.2 && Math.abs(z - t.z) < R * 1.4;
+    const near = zi === 0 ? 1e9 : zi === 1 ? 32 : 18;
+    const put = (key: string, cls: string, text: string, x: number, z: number, up: number) => {
+      seen.add(key);
+      let e = this.labels.get(key);
+      if (!e) { e = document.createElement('div'); document.body.appendChild(e); this.labels.set(key, e); }
+      if (e.className !== cls) e.className = cls;
+      if (e.textContent !== text) e.textContent = text;
+      const s = this.input.screen(x, heightAt(w, x, z) + up, z);
+      e.style.display = ''; e.style.left = `${s.x}px`; e.style.top = `${s.y}px`;
+    };
     for (const p of g.disc.pois) {
-      const show = p.known && p.major && Math.abs(p.x - t.x) < R * 1.2 && Math.abs(p.z - t.z) < R * 1.4;
-      let e = this.labels.get(p.id);
-      if (!show) { if (e) e.style.display = 'none'; continue; }
-      if (!e) { e = document.createElement('div'); e.className = 'lbl'; document.body.appendChild(e); this.labels.set(p.id, e); }
-      e.style.display = ''; e.textContent = g.disc.display(p);
-      const s = this.input.screen(p.x, heightAt(w, p.x, p.z) + 4, p.z);
-      e.style.left = `${s.x}px`; e.style.top = `${s.y}px`;
+      if (!p.known || !inView(p.x, p.z) || Math.hypot(p.x - t.x, p.z - t.z) > near) continue;
+      if (p.major) put('p' + p.id, zi === 0 ? 'lbl map' : 'lbl', (zi === 0 ? '◆ ' : '') + cap(g.disc.display(p)), p.x, p.z, 4);
+      else if (zi === 0 && (p.kind === 'water' || p.kind === 'food')) put('p' + p.id, 'lbl', (p.kind === 'water' ? '~ ' : '* ') + cap(p.label), p.x, p.z, 1.5);
     }
+    for (const m of g.disc.markers) if (m.kind === '?' && inView(m.x, m.z) && Math.hypot(m.x - t.x, m.z - t.z) < near + m.r) put('m' + m.id, 'lbl rum', m.text, m.x, m.z, 1.6);
+    if (zi === 0 && inView(g.fire.x, g.fire.z)) put('camp', 'lbl map', '◆ Camp', g.fire.x, g.fire.z, 4);
+    for (const [k, e] of this.labels) if (!seen.has(k)) e.style.display = 'none';
+  }
+
+  /** The open request: a big speech bubble over the asker with the answers on it. */
+  private drawAsk() {
+    const g = this.game.group, r = g.requests.cur;
+    if (!r || !this.askOpen) { this.askEl.style.display = 'none'; if (!r) this.askOpen = false; return; }
+    const key = r.p.id + r.text;
+    if (key !== this.askKey) {
+      this.askKey = key;
+      this.askEl.innerHTML = `<div class="x">✕</div><div class="who">${r.p.per.name.toUpperCase()}</div><div></div><div class="acts"></div>`;
+      (this.askEl.children[2] as HTMLElement).textContent = `"${r.text}"`;
+      (this.askEl.querySelector('.x') as HTMLElement).onclick = () => { this.askOpen = false; };
+      const acts = this.askEl.querySelector('.acts') as HTMLElement;
+      r.answers.forEach((a, i) => { const b = document.createElement('button'); b.textContent = a.label; if (a.cls) b.className = a.cls; b.onclick = () => { g.requests.answer(i); this.askOpen = false; }; acts.appendChild(b); });
+    }
+    const p = r.p, z = this.game.rig.zoom, s = this.input.screen(p.x, heightAt(this.game.world, p.x, p.z), p.z);
+    this.askEl.style.display = 'block';
+    this.askEl.style.left = `${Math.max(160, Math.min(innerWidth - 160, s.x))}px`; this.askEl.style.top = `${Math.max(120, s.y - 28 * z)}px`;
+  }
+
+  /** Morning plan: three cards, one click. Nobody picks in 20 s → the most trusted idea wins. */
+  private drawGoal(dt: number) {
+    const G = this.game.group.goals, opts = G.opts;
+    if (!opts.length) { if (this.goalKey) { this.goalKey = ''; this.goalEl.classList.remove('open'); } return; }
+    const key = opts.map(o => o.who.id + o.title).join();
+    if (key !== this.goalKey) {
+      this.goalKey = key; this.goalT = 20;
+      this.goalEl.innerHTML = '<h2>WHAT DO WE DO TODAY?</h2><div class="cards box" style="background:none;border:0;box-shadow:none"></div><div class="bar"><i></i></div>';
+      const cards = this.goalEl.querySelector('.cards') as HTMLElement;
+      opts.forEach((o, i) => {
+        const c = this.el(`<div class="c box"><h3></h3><div class="q"></div><div style="opacity:.7;margin-top:4px"></div></div>`, cards);
+        (c.querySelector('h3') as HTMLElement).textContent = o.title;
+        (c.querySelector('.q') as HTMLElement).textContent = `"${o.line}"`;
+        (c.lastElementChild as HTMLElement).textContent = `— ${o.who.per.name}`;
+        c.prepend(this.portrait(o.who));
+        c.onclick = () => G.choose(i);
+      });
+      this.goalEl.classList.add('open');
+    }
+    if (this.game.clock.speed > 0 && (this.goalT -= dt) <= 0) G.autoPick();
+    (this.goalEl.querySelector('.bar i') as HTMLElement).style.width = `${Math.max(0, this.goalT / 20) * 100}%`;
   }
 }

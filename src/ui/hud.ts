@@ -55,6 +55,16 @@ export class Hud {
       e.stopPropagation();
     });
 
+    // hover a dot on the minimap to see what it is
+    miniWrap.addEventListener('pointermove', e => {
+      const r = this.mini.getBoundingClientRect(), x = ((e.clientX - r.left) / r.width) * N, z = ((e.clientY - r.top) / r.height) * N, d = game.group.disc;
+      let best = '', bd = 10;
+      for (const p of d.pois) if (p.known) { const dd = Math.hypot(p.x - x, p.z - z); if (dd < bd) { bd = dd; best = d.display(p); } }
+      for (const m of d.markers) { const dd = Math.hypot(m.x - x, m.z - z); if (dd < bd) { bd = dd; best = m.text; } }
+      if (Math.hypot(game.group.fire.x - x, game.group.fire.z - z) < bd) best = 'Camp';
+      miniWrap.title = best;
+    });
+
     const gear = el('<button id="gear" class="hud btn">⚙ SETTINGS</button>');
     const panel = el(`<div id="panel" class="hud">
       <label>Pixel filter <input id="o-filter" type="checkbox"></label>

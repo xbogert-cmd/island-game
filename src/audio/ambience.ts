@@ -115,6 +115,16 @@ export class Ambience {
     if (big) for (const f of [196, 247, 294]) this.tone('sine', t, 2.8, f, f, 0.035, 0);
   }
   /** Speech: a few murmured blips at the speaker's pitch. */
+  /** Someone wants your attention: a little "hey!" */
+  attention() { const t = this.ctx?.currentTime; if (t === undefined) return; this.tone('triangle', t, 0.12, 660, 700, 0.05, 0); this.tone('triangle', t + 0.14, 0.2, 880, 940, 0.05, 0); }
+  /** How an idea turned out. */
+  sting(good: boolean) {
+    const t = this.ctx?.currentTime; if (t === undefined) return;
+    const n = good ? [523, 659, 784, 1047] : [392, 370, 349, 262];
+    n.forEach((f, i) => this.tone(good ? 'triangle' : 'square', t + i * 0.11, good ? 0.35 : 0.22, f, f, good ? 0.045 : 0.025, 0));
+  }
+  /** Something dropped on the pile. */
+  clunk() { const t = this.ctx?.currentTime; if (t === undefined) return; this.tone('sine', t, 0.08, 180, 90, 0.08, 0); this.tone('square', t + 0.02, 0.04, 320, 200, 0.015, 0); }
   blip(voice: number) {
     const t = this.ctx?.currentTime; if (t === undefined) return;
     const n = 3 + ((Math.random() * 4) | 0), pan = (Math.random() - 0.5) * 0.6;

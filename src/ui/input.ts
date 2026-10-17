@@ -19,14 +19,26 @@ export class Input {
       const g = game.group; if (!g.leader) return;
       const p = this.pick(e.clientX, e.clientY);
       if (p && !g.scoutPick) { if (p === g.leader) g.toggleWait(); else this.onPerson(p); return; }
+      const sc = g.scoutPick ? null : this.trailAt(e.clientX, e.clientY);
+      if (sc) { game.camWho = sc; game.rig.followOn = true; return; }
       const q = this.ground(e.clientX, e.clientY);
       if (q) { g.clickGround(q.x, q.z); game.rig.followOn = true; this.ping(q.x, q.z); }
     });
     el.addEventListener('contextmenu', (e) => { e.preventDefault(); game.group.whistle(); });
     el.addEventListener('pointermove', (e) => {
       this.hover = game.group.leader ? this.pick(e.clientX, e.clientY) : null;
-      el.style.cursor = game.group.scoutPick ? 'crosshair' : this.hover ? 'pointer' : 'default';
+      el.style.cursor = game.group.scoutPick ? 'crosshair' : this.hover || this.trailAt(e.clientX, e.clientY) ? 'pointer' : 'default';
     });
+  }
+
+  /** A scout whose dotted trail is under the cursor: clicking it follows them. */
+  private trailAt(cx: number, cy: number): Person | null {
+    const w = this.game.world;
+    for (const t of this.game.group.scouting.trips) for (const q of t.trail) {
+      const s = this.screen(q.x, heightAt(w, q.x, q.z), q.z);
+      if (Math.abs(s.x - cx) < 8 && Math.abs(s.y - cy) < 8) return t.p;
+    }
+    return null;
   }
 
   /** Little ring where you clicked. */

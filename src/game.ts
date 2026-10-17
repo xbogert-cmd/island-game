@@ -192,9 +192,45 @@ export class Game {
       const y = Math.max(heightAt(w, m.x, m.z), U.uTide.value) + 2.5 + Math.sin(tt * 2.5) * 0.25;
       b.push(m.x, y, m.z, ATLAS[red ? 'xMark' : 'qMark'][0], false, 1, 1, 1, 2);
     }
+    this.drawCamp(near);
     for (const tr of g.scouting.trips) for (let i = 0; i < tr.trail.length; i += 1) {
       const q = tr.trail[i]; if (!near(q.x, q.z)) continue;
       b.push(q.x, heightAt(w, q.x, q.z) + 0.06, q.z, ATLAS.dot2[0], false, 1, 0.95, 0.75, 2, true);
+    }
+  }
+
+  /** The food and water pile by the fire (one heap per kind, size = how much), and what people built. */
+  private drawCamp(near: (x: number, z: number) => boolean) {
+    const g = this.group, st = g.stock, b = this.batch, w = this.world, rr = U.uCamRight.value, yUp = g.bodies.yUp, tt = U.uTime.value;
+    const P = st.pile;
+    if (near(P.x, P.z)) {
+      const heaps = ([['pSnack', st.food.snacks], ['pFruit', st.food.fruit], ['pCoco', st.food.coconut], ['pShell', st.food.shell], ['pFish', st.food.fish], ['pJug', st.water]] as [string, number][]).filter(h => h[1] > 0);
+      const gy = heightAt(w, P.x, P.z);
+      heaps.forEach(([spr, n], hi) => {
+        const cx = (hi - (heaps.length - 1) / 2) * 1.75;
+        let k = Math.min(10, Math.ceil(n / 2)), row = 0;
+        while (k > 0) {
+          const len = Math.min(k, 4 - row);
+          for (let j = 0; j < len; j++) {
+            const dx = cx + (j - (len - 1) / 2) * 0.42;
+            b.push(P.x + rr.x * dx, gy + row * 3 * yUp, P.z + rr.z * dx, ATLAS[spr][0]);
+          }
+          k -= len; row++;
+          if (row > 3) break;
+        }
+      });
+    }
+    const night = this.clock.night, lit = night > 0.3 && this.weather.rain < 0.5;
+    for (const pr of st.props) {
+      if (!near(pr.x, pr.z)) continue;
+      const gy = heightAt(w, pr.x, pr.z);
+      if (pr.kind === 'sos') { b.push(pr.x, gy + 0.04, pr.z, ATLAS.sos[0], false, 1, 1, 1, 1, true); continue; }
+      const fr = ATLAS[pr.kind]; b.push(pr.x, gy - 0.05, pr.z, fr[Math.floor(tt * 2) % fr.length]);
+      if (pr.kind === 'signalFire' && lit) {
+        for (let i = 0; i < 3; i++) { const dx = (i - 1) * 2.5 * PX; b.push(pr.x + rr.x * dx, gy + (2 + (i === 1 ? 2 : 0)) * yUp, pr.z + rr.z * dx, ATLAS.flame[Math.floor(tt * 9 + i) % 3], false, 1, 1, 1, 2); }
+        if (Math.random() < 0.15) this.particles.emit('dot1', pr.x + (Math.random() - 0.5) * 0.6, gy + 1, pr.z, { vy: 2.5, vx: (Math.random() - 0.5), max: 1, r: 1, g: 0.65, b: 0.25, emissive: true, fade: false });
+        if (Math.random() < 0.08) this.particles.emit('puff', pr.x, gy + 1.5, pr.z, { vy: 1.4, vx: U.uWindDir.value.x * 2, vz: U.uWindDir.value.y * 2, max: 3, r: 0.6, g: 0.6, b: 0.62, a: 0.6 });
+      }
     }
   }
 

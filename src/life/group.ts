@@ -8,6 +8,9 @@ import { Person, Pt, Survivors } from './people';
 import { Story } from './story';
 import { Discovery, Poi } from './discovery';
 import { Scouting } from './scouting';
+import { Food, Stock } from './stock';
+import { Requests } from './requests';
+import { Goals } from './goals';
 
 const pickOf = <T,>(a: T[]) => a[(Math.random() * a.length) | 0];
 export const PARTY_MAX = 5;
@@ -23,7 +26,11 @@ export class Group {
   story: Story;
   disc: Discovery;
   scouting: Scouting;
+  stock: Stock;
+  requests: Requests;
+  goals: Goals;
   fire: Pt;
+  fishSpot: Pt;
   leader: Person | null = null;
   choices: Person[] = [];
   /** set while the player is choosing where a scout should go */
@@ -44,13 +51,18 @@ export class Group {
   private nightT = 60;
   private day = 1;
   private sleepSpots: Pt[] = [];
-  private fishSpot: Pt;
+  private mealDay = 0;
+  private mealT = 0;
+  private rainT = 0;
   private shownHints = new Set<string>();
   onAlarm = () => {};
   onWhistle = () => {};
   onChime = (_big: boolean) => {};
+  onAsk = () => {};
+  onSting = (_good: boolean) => {};
+  onClunk = () => {};
 
-  constructor(public w: World, public clock: Clock, private weather: Weather, fx: Particles) {
+  constructor(public w: World, public clock: Clock, private weather: Weather, public fx: Particles) {
     this.grid = new WalkGrid(w);
     const { people: pers, rel } = makePeople(w.seed);
     this.bodies = new Survivors(w, this.grid, pers, fx);
@@ -64,12 +76,26 @@ export class Group {
     for (const [sx, sz] of [[-5, -4], [4.5, -5]]) for (let k = 0; k < 4; k++) this.sleepSpots.push({ x: f.x + sx + (k - 1.5) * 0.9, z: f.z + sz + 0.4 });
     for (let k = 0; k < 12; k++) { const a = (k / 12) * 6.28 + 0.2; this.sleepSpots.push({ x: f.x + Math.cos(a) * 4.2, z: f.z + Math.sin(a) * 4.2 }); }
     // a spot on the shore for fishing, toward the sea past the wreck
-    let fs = { x: w.crash.x, z: w.crash.z }; const dx = w.crash.x - f.x, dz = w.crash.z - f.z, dl = Math.hypot(dx, dz) || 1;
-    for (let d = 0; d < 60; d += 1) { const x = w.crash.x + (dx / dl) * d + (-dz / dl) * 8, z = w.crash.z + (dz / dl) * d + (dx / dl) * 8; if (this.grid.walkable(x, z)) fs = { x, z }; else if (d > 4) break; }
+    const fs = this.shore(12, []);
     this.fishSpot = fs;
+    this.stock = new Stock(this.fire, this.grid);
+    this.requests = new Requests(this);
+    this.goals = new Goals(this);
     const order = [...this.people].sort(() => Math.random() - 0.5);
     this.choices = order.slice(0, 3);
     try { for (const k of JSON.parse(localStorage.getItem('island.hints') ?? '[]')) this.shownHints.add(k); } catch { /* ignore */ }
+  }
+
+  /** The bit of beach nearest the wreck that touches the sea, at least `minFire` from the fire and 8 from `away`. */
+  shore(minFire: number, away: Pt[]): Pt {
+    const w = this.w, c = w.crash, f = this.fire, wet = (x: number, z: number) => heightAt(w, x, z) < 0.3;
+    let best: Pt = { x: c.x, z: c.z }, bd = 1e9;
+    for (let z = c.z - 60; z <= c.z + 60; z += 1) for (let x = c.x - 60; x <= c.x + 60; x += 1) {
+      const d = Math.hypot(x - c.x, z - c.z);
+      if (d >= bd || d < 6 || Math.hypot(x - f.x, z - f.z) < minFire || away.some(a => Math.hypot(a.x - x, a.z - z) < 8) || !this.grid.walkable(x, z)) continue;
+      if (wet(x + 3, z) || wet(x - 3, z) || wet(x, z + 3) || wet(x, z - 3)) { bd = d; best = { x, z }; }
+    }
+    return best;
   }
 
   get party() { return this.people.filter(p => p.mode === 'follow' || p.mode === 'wait'); }
@@ -204,7 +230,7 @@ export class Group {
   startHealing(p: Person) {
     const medic = this.people.find(o => o !== p && o.per.skill === 'medic' && o.mode === 'camp');
     p.heal = 720 * (medic ? 0.3 : 1) * (this.firstAid ? 0.5 : 1);
-    if (medic) { this.story.say(medic, 'Sit down. Let me see that.'); this.story.revealSkill(medic, `${medic.per.name} splinted ${p.per.name}'s leg like they'd done it a thousand times. A medic.`); }
+    if (medic) { this.story.say(medic, 'Sit down. Let me see that.'); this.story.revealSkill(medic, `${medic.per.name} patched up ${p.per.name} like they'd done it a thousand times. A medic.`); }
     else {
       const fake = this.people.find(o => o.per.secret === 'fakeJob' && o.mode === 'camp' && !this.story.secretKnown.has(o.id));
       if (fake) { this.story.say(fake, "I... don't actually know how to fix that."); this.story.revealSecret(fake); }
@@ -245,9 +271,12 @@ export class Group {
         p.mode = 'camp'; p.act = ''; this.story.say(p, 'Home. Thank you.');
         if (p.hurt) this.startHealing(p);
       }
-      if (p.hurt && p.heal > 0 && p.mode === 'camp' && (p.heal -= dt) <= 0) { p.hurt = false; this.story.toast(`${p.per.name} is back on their feet.`, 'good', p); }
+      if (p.hurt && p.heal > 0 && p.mode === 'camp' && (p.heal -= dt * (this.goals.active('rest') ? 2 : 1)) <= 0) { p.hurt = false; this.story.toast(`${p.per.name} is back on their feet.`, 'good', p); }
     }
     this.scouting.update(dt);
+    this.requests.update(dt);
+    this.goals.update();
+    this.camp(dt, rain);
 
     // what you and your party can see
     if ((this.seeT -= dt) <= 0) {
@@ -322,6 +351,8 @@ export class Group {
   private campLife(p: Person, dt: number, night: boolean, rain: number) {
     const B_ = this.bodies, F = this.fire, S = this.story, h = this.clock.hour;
     p.torch = false;
+    if (p.act === 'ask' || p.act === 'job') { this.requests.drive(p, dt); return; }
+    if (p.act === 'huddle') { this.goals.drive(p, dt); return; }
     const goTo = (x: number, z: number) => { p.ax = x; p.az = z; if (!B_.go(p, x, z)) p.path = []; };
     const walking = () => { if (p.path.length) { const done = B_.advance(p, B_.speed(p) * (p.act === 'shelter' ? 1.5 : 1), dt); p.pose = p.hurt ? 'limp' : p.act === 'shelter' ? 'run' : 'walk'; return !done; } return false; };
     // overriding needs: rain, night, sleep, injury
@@ -339,19 +370,18 @@ export class Group {
     if (!want && (p.act === 'shelter' || p.act === 'sleep' || p.act === 'fire' || p.act === 'rest')) { p.act = ''; p.actT = Math.random() * 2; }
     if (walking()) return;
     switch (p.act) {
-      case 'fire': p.pose = 'sit'; B_.faceToward(p, F.x, F.z); return;
+      case 'fire': p.pose = this.mealT > 0 && !p.hungry ? 'eat' : 'sit'; B_.faceToward(p, F.x, F.z); return;
       case 'sleep': p.pose = 'sleep'; return;
       case 'shelter': p.pose = 'cover'; return;
       case 'rest': p.pose = 'sit'; return;
       case 'fetch': case 'collect': {
         if (p.carry === 0 && (p.actT -= dt) > 0) { p.pose = 'collect'; return; }
-        if (p.carry === 0) { p.carry = p.act === 'fetch' ? 1 : 2; goTo(F.x + (Math.random() - 0.5) * 4, F.z + 2 + Math.random() * 2); return; }
-        p.carry = 0; p.act = ''; p.actT = 2;
-        if (p.per.secret === 'hoarder' && Math.random() < 0.12) S.revealSecret(p);
+        if (p.carry === 0) { p.carry = p.act === 'fetch' ? 1 : 2; const P = this.stock.pile; goTo(P.x + (Math.random() - 0.5) * 2, P.z + 1 + Math.random()); return; }
+        this.deposit(p); p.carry = 0; p.act = ''; p.actT = 2;
         return;
       }
       case 'fish': p.pose = 'fish'; B_.faceToward(p, this.w.crash.x * 2 - F.x, this.w.crash.z * 2 - F.z);
-        if ((p.actT -= dt) <= 0) { p.act = ''; p.actT = 3; p.carry = 2; S.revealSkill(p, `${p.per.name} came back from the shore with fish. They grew up fishing.`); goTo(F.x + 2, F.z + 2); }
+        if ((p.actT -= dt) <= 0) { p.act = 'collect'; p.actT = 0; p.carry = 2; p.bring = 'fish'; S.revealSkill(p, `${p.per.name} came back from the shore with fish. They grew up fishing.`); goTo(this.stock.pile.x + 1, this.stock.pile.z + 1); }
         return;
       case 'nap': p.pose = 'sleep'; if ((p.actT -= dt) <= 0) { p.act = ''; p.actT = 1; } return;
       case 'talk': case 'listen': {
@@ -389,16 +419,54 @@ export class Group {
       const calm = camp.find(o => has(o.per, 'calm') && o !== rv);
       if (calm) setTimeout(() => S.say(calm, 'Hey! Both of you, enough.'), 2500);
     }]);
-    const work = has(p.per, 'hardworking') ? 3 : has(p.per, 'lazy') ? 0.5 : 1.5;
+    const G = this.goals, rest = G.active('rest');
+    const work = (has(p.per, 'hardworking') ? 3 : has(p.per, 'lazy') ? 0.5 : 1.5) * (rest ? 0.15 : 1);
+    const gFood = G.active('food') ? 4 : 1, gWater = G.active('water') ? 4 : 1;
     const water = this.disc.nearestKnown('water', F), food = this.disc.nearestKnown('food', F);
     const busy = (a: string) => this.people.filter(o => o.act === a).length;
-    if (water && busy('fetch') < 2 && Math.hypot(water.x - F.x, water.z - F.z) < 170) opts.push([work, () => { p.act = 'fetch'; p.actT = 2; goTo(water.x, water.z); }]);
-    if (food && busy('collect') < 3 && Math.hypot(food.x - F.x, food.z - F.z) < 170) opts.push([work, () => { p.act = 'collect'; p.actT = 3; goTo(food.x + Math.random() * 2 - 1, food.z + Math.random() * 2 - 1); }]);
-    if (p.per.skill === 'fisher' && busy('fish') < 1) opts.push([2, () => { p.act = 'fish'; p.actT = 14; goTo(this.fishSpot.x, this.fishSpot.z); }]);
-    if (h > 11.5 && h < 14.5) opts.push([has(p.per, 'lazy') ? 4 : 1, () => { p.act = 'nap'; p.actT = 15 + Math.random() * 15; const s = this.sleepSpots[p.id % 8]; goTo(s.x, s.z); }]);
+    if (water && busy('fetch') < (gWater > 1 ? 5 : 2) && Math.hypot(water.x - F.x, water.z - F.z) < 170) opts.push([work * gWater, () => { p.act = 'fetch'; p.actT = 2; p.bring = 'water'; goTo(water.x, water.z); }]);
+    if (food && busy('collect') < (gFood > 1 ? 6 : 3) && Math.hypot(food.x - F.x, food.z - F.z) < 170) opts.push([work * gFood, () => {
+      const f = this.disc.pois.filter(q => q.known && q.kind === 'food' && Math.hypot(q.x - F.x, q.z - F.z) < 170).sort(() => Math.random() - 0.5)[0] ?? food;
+      p.act = 'collect'; p.actT = 3; p.bring = f.sprite === 'coconuts' ? 'coconut' : f.sprite === 'shells' ? 'shell' : 'fruit';
+      goTo(f.x + Math.random() * 2 - 1, f.z + Math.random() * 2 - 1);
+    }]);
+    if (p.per.skill === 'fisher' && busy('fish') < 1) opts.push([2 * gFood * (rest ? 0.2 : 1), () => { p.act = 'fish'; p.actT = 14; goTo(this.fishSpot.x, this.fishSpot.z); }]);
+    if ((h > 11.5 && h < 14.5) || rest) opts.push([has(p.per, 'lazy') || rest ? 4 : 1, () => { p.act = 'nap'; p.actT = 15 + Math.random() * 15; const s = this.sleepSpots[p.id % 8]; goTo(s.x, s.z); }]);
     let tot = 0; for (const o of opts) tot += o[0];
     let k = Math.random() * tot;
     for (const o of opts) if ((k -= o[0]) <= 0) { o[1](); break; }
+  }
+
+  /** Drop what they carried on the pile. A hoarder keeps some back. */
+  private deposit(p: Person) {
+    const k = p.bring as Food | 'water'; p.bring = '';
+    if (!k) return;
+    p.poseO = 'collect'; p.poseT = 0.6;
+    if (p.per.secret === 'hoarder' && !this.story.secretKnown.has(p.id) && k !== 'water' && Math.random() < 0.3) { this.stock.stolen += 2; return; }
+    this.stock.add(k, k === 'fish' ? (this.stock.has('dryingRack') ? 4 : 3) : 2);
+    this.onClunk();
+  }
+
+  /** The evening meal, rain in the catcher. */
+  private camp(dt: number, rain: number) {
+    const S = this.story, st = this.stock, h = this.clock.hour;
+    if (this.mealT > 0) this.mealT -= dt;
+    if (rain > 0.5 && st.has('rainCatcher') && (this.rainT -= dt) <= 0) { this.rainT = 25; st.add('water', 1); }
+    if (h >= 20 && h < 22 && this.mealDay !== this.clock.day) {
+      this.mealDay = this.clock.day; this.mealT = 45;
+      const eaters = this.people.filter(p => !(p.mode === 'scout' || p.mode === 'lost' || p.mode === 'hurt'));
+      const short = st.meal(eaters.length);
+      for (const p of this.people) p.hungry = false;
+      const order = eaters.filter(p => p !== this.leader).sort(() => Math.random() - 0.5);
+      for (let i = 0; i < Math.min(short, eaters.length); i++) (order[i] ?? this.leader!).hungry = true;
+      if (short > 0) {
+        const all = short >= eaters.length;
+        S.toast(all ? 'There was nothing to eat tonight.' : `${short} of us went to bed hungry.`, 'bad');
+        S.log(all ? 'Nothing to eat tonight. Nobody said much.' : `Not enough food for everyone. ${short} went hungry.`);
+        S.trustAll(all ? -3 : -1, this.leader);
+        this.hint('hungry', 'The pile by the fire is your food and water. Find food, and people gather it on their own.');
+      } else if (st.ration > 0) S.log('Half portions again. Nobody complained. Out loud.');
+    }
   }
 
   /** Markers resolve as you reach them; lost and hurt scouts are found. */
@@ -465,6 +533,7 @@ export class Group {
       leader: L, away: this.people.filter(p => p.mode === 'scout' || p.mode === 'lost' || p.mode === 'hurt'),
       places: this.disc.pois.filter(q => q.known && q.major).map(q => this.disc.display(q)),
       food: this.disc.pois.some(q => q.known && q.kind === 'food'), nights: this.clock.day,
+      hungry: this.people.filter(p => p.hungry), gripes: this.requests.gripes, signal: this.stock.has('signalFire'),
     });
   }
 
@@ -485,6 +554,7 @@ export class Group {
     if (p.mode === 'lost') { p.why = 'Lost, and scared'; return 'scared'; }
     if (p.pose === 'sleep') { p.why = 'Asleep'; return 'tired'; }
     if (p.moodT > 0 && p.tmood !== 'none') { p.why = WHY[p.tmood]; return p.tmood; }
+    if (p.hungry) { p.why = 'Hungry'; return 'sad'; }
     const outside = Math.hypot(p.x - this.fire.x, p.z - this.fire.z) > 25;
     if (night && outside && !p.torch && p.per.weakness === 'afraid of the dark') { p.why = 'Afraid of the dark'; return 'scared'; }
     if (p.per.pair >= 0 && p.apart > 180) { p.why = `Worried about ${this.people[p.per.pair].per.name}`; return 'worried'; }

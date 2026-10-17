@@ -84,7 +84,7 @@ export class Story {
    * Talk around the campfire at night. Lines come from relationships, recent events and trust.
    * `ctx` gives what the talk can be about.
    */
-  campfire(dt: number, sitting: Person[], ctx: { leader: Person | null; away: Person[]; places: string[]; food: boolean; nights: number }) {
+  campfire(dt: number, sitting: Person[], ctx: { leader: Person | null; away: Person[]; places: string[]; food: boolean; nights: number; hungry: Person[]; gripes: { p: Person; text: string }[]; signal: boolean }) {
     if (sitting.length < 2 || (this.talkT -= dt) > 0) return;
     this.talkT = 3 + Math.random() * 4;
     const sp = pickOf(sitting), L = ctx.leader, N = sp.per.name;
@@ -108,6 +108,10 @@ export class Story {
       if (t > 65) lines.push([2, () => this.say(sp, pickOf([`We're lucky ${L.per.name} is leading.`, `${L.per.name} will get us through this.`]))]);
       if (t < 35) lines.push([2 + (35 - t) / 10, () => { this.say(sp, pickOf([`Why are we following ${L.per.name} anyway?`, `${L.per.name} is going to get us killed.`, 'We should be doing more than this.'])); this.mood(sp, 'angry', 6); }]);
     }
+    const gi = ctx.gripes.findIndex(x => x.p === sp);
+    if (gi >= 0) { const gr = ctx.gripes.splice(gi, 1)[0]; this.say(sp, gr.text); this.mood(sp, 'angry', 10); return; }
+    if (ctx.hungry.includes(sp)) lines.push([3, () => { this.say(sp, pickOf(["My stomach won't stop growling.", "I can't sleep this hungry.", 'Is there really nothing left?'])); this.mood(sp, 'sad', 10); }]);
+    if (ctx.signal) lines.push([0.8, () => this.say(sp, pickOf(['Look at the signal fire. Somebody has to see that.', 'Every night I watch the signal fire and hope.']))]);
     if (ctx.places.length) { const pl = pickOf(ctx.places); lines.push([2, () => this.say(sp, pickOf([`Did you see ${pl}? Who made that?`, `I keep thinking about ${pl}.`]))]); }
     lines.push([1.5, () => this.say(sp, pickOf(['Back home I was ' + sp.per.backstory.toLowerCase() + '.', 'I keep hearing engines in the waves.', `How many days now? ${ctx.nights}?`, 'Somebody will come for us. Right?', `${o.per.name}, you okay?`]))]);
     if (sp.per.pair >= 0) lines.push([1, () => { const pr = this.people[sp.per.pair]; if (sitting.includes(pr)) { this.say(sp, `At least we're together, ${pr.per.name}.`); this.mood(sp, 'fond', 8); } }]);

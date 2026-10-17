@@ -113,6 +113,9 @@ const PAL: Record<string, string> = {
   a: '#8a6a4a', h: '#b8784a', x: '#ffffff', z: '#fff6a0', m: '#5a3a28', M: '#7a5236', q: '#9a9a94',
 };
 
+/** Every pixel k times as big, for things that should read from far away. */
+const big = (rows: string[], k: number) => rows.flatMap(r => Array(k).fill(r.split('').map(c => c.repeat(k)).join('')) as string[]);
+
 const DEFS: Record<string, { frames: string[][]; outline?: boolean }> = {
   crab: { frames: [['r.r.r.r', '.rrRrr.', 'rrrrrrr', '.l.l.l.'], ['r.r.r.r', '.rrRrr.', 'rrrrrrr', 'l.l.l.l']] },
   gullFly: { frames: [['ww.....ww', '.ww...ww.', '..wwwwwo.', '....W....'], ['.........', '..wwwwwo.', '.ww...ww.', 'ww.....ww']] },
@@ -164,6 +167,20 @@ const DEFS: Record<string, { frames: string[][]; outline?: boolean }> = {
   shells: { frames: [['p.x..R', 'pp.xxR', '..x...']] },
   suitcase: { frames: [['..aa..', 'hhhhhh', 'hahhah', 'hhhhhh', 'hahhah']] },
   seat: { frames: [['bb...', 'bb...', 'bb...', 'bbbbb', 'g...g']] },
+  // the camp stockpile
+  pFruit: { frames: [['.v.', 'rRr', '.r.']] },
+  pCoco: { frames: [['.nn.', 'nNnn', '.nn.']] },
+  pShell: { frames: [['.pp.', 'pxxp']] },
+  pFish: { frames: [['.SSS.S', 'SeSSSS', '.SSS.S']] },
+  pJug: { frames: [['.g.', 'bSb', 'bbb', 'bbb']] },
+  pSnack: { frames: [['WbW', 'bwb', 'WbW']] },
+  askMark: { frames: [['.yy.', 'yzzy', '.yy.', '.yy.', '....', '.yy.']] },
+  // things people build
+  signalFire: { frames: [['.....n.....', '....nNn....', '...nN.Nn...', '..nN...Nn..', '.nN.....Nn.', 'nNnnnnnnnNn']] },
+  dryingRack: { frames: [['nnnnnnnnnn', 'n.S..S..Sn', 'n.S..S..Sn', 'n.e..e..en', 'n........n', 'n........n']] },
+  rainCatcher: { frames: [['n.......n', 'bbbbbbbbb', '.bBBBBBb.', '..bBcBb..', 'n..bbb..n', 'n...g...n', 'n..ggg..n']] },
+  lookout: { frames: [['nrrr.', 'nrRrr', 'nrr..', 'n....', 'n....', 'n....', 'n....', 'n....', 'n....', 'n....', 'nn...'], ['nrr..', 'nrRr.', 'nrrrr', 'n....', 'n....', 'n....', 'n....', 'n....', 'n....', 'n....', 'nn...']] },
+  sos: { frames: [big(['qqq.qqq.qqq', 'q...q.q.q..', 'qqq.q.q.qqq', '..q.q.q...q', 'qqq.qqq.qqq'], 3)] },
 };
 
 export type SpriteName = keyof typeof DEFS;

@@ -1,0 +1,175 @@
+import { has, Trait } from './persona';
+import { Person } from './people';
+import { PropKind } from './stock';
+import { PROP_TEXT } from './requests';
+import { dirName } from './scouting';
+import type { Group } from './group';
+
+const pickOf = <T,>(a: T[]) => a[(Math.random() * a.length) | 0];
+
+export type GoalKind = 'explore' | 'food' | 'water' | 'rest' | 'build' | 'salvage' | 'mend' | 'search';
+export interface GoalOpt { kind: GoalKind; who: Person; title: string; line: string; x?: number; z?: number; prop?: PropKind; a?: Person; b?: Person }
+
+/** The group's plan for the day: three people pitch at dawn, you pick one (or the most trusted wins). */
+export class Goals {
+  opts: GoalOpt[] = [];
+  cur: GoalOpt | null = null;
+  private judged = true;
+  private day = 0;
+  private start = 0;
+  private ignored = new Map<number, number>();
+
+  constructor(private g: Group) {}
+
+  active(k: GoalKind) { return !!this.cur && !this.judged && this.cur.kind === k; }
+  building(k: PropKind | 'wreck') { const c = this.cur; return !!c && !this.judged && ((c.kind === 'build' && c.prop === k) || (k === 'wreck' && c.kind === 'salvage')); }
+
+  update() {
+    const g = this.g, h = g.clock.hour;
+    if (!g.leader) return;
+    if (this.day !== g.clock.day && h >= 7 && h < 11 && this.offer()) this.day = g.clock.day;    // retried until enough people are up
+    if (this.opts.length && h >= 11) this.autoPick();
+    if (this.cur && !this.judged && h >= 18.5) this.judge();
+  }
+
+  /** Walk to the fire for the morning huddle. Called from camp life. */
+  drive(p: Person, dt: number) {
+    const g = this.g, F = g.fire;
+    if (!this.opts.length) { p.act = ''; return; }
+    if (p.path.length) { g.bodies.advance(p, g.bodies.speed(p) * 1.2, dt); p.pose = 'walk'; return; }
+    if (!p.poseO) p.pose = 'idle';
+    g.bodies.faceToward(p, F.x, F.z);
+  }
+
+  choose(i: number) {
+    const g = this.g, S = g.story, o = this.opts[i]; if (!o) return;
+    for (const x of this.opts) {
+      if (x === o) { this.ignored.set(x.who.id, 0); continue; }
+      const n = (this.ignored.get(x.who.id) ?? 0) + 1; this.ignored.set(x.who.id, n);
+      if (n >= 3) { this.ignored.set(x.who.id, 0); S.trust(x.who, -2); S.mood(x.who, 'angry', 30); g.requests.gripes.push({ p: x.who, text: 'Three days now. Nobody ever listens to me.' }); }
+    }
+    this.opts = []; this.cur = o; this.judged = false; this.start = g.clock.minutes;
+    g.stock.today = { food: 0, water: 0 };
+    for (const p of g.people) if (p.act === 'huddle') { p.act = ''; p.actT = 1 + Math.random() * 3; if (Math.random() < 0.5) { p.poseO = 'cheer'; p.poseT = 1.2; } }
+    S.trust(o.who, 2); S.mood(o.who, 'happy', 20); S.say(o.who, pickOf(["Let's do it!", 'Good. Come on, everyone.', 'Right!']));
+    S.log(`Today's plan, ${o.who.per.name}'s idea: ${o.title.toLowerCase()}.`);
+    this.begin(o);
+  }
+
+  autoPick() {
+    if (!this.opts.length) return;
+    let bi = 0; this.opts.forEach((o, i) => { if (o.who.per.trust > this.opts[bi].who.per.trust) bi = i; });
+    this.g.story.toast(`Nobody decided, so they went with ${this.opts[bi].who.per.name}'s plan.`, 'info', this.opts[bi].who);
+    this.choose(bi);
+  }
+
+  // ------------------------------------------------------------------
+
+  private offer(): boolean {
+    const g = this.g, S = g.story, L = g.leader!, R = g.requests;
+    const pool = g.people.filter(p => p !== L && !p.hurt && (p.mode === 'camp' || p.mode === 'follow' || p.mode === 'wait'));
+    if (pool.length < 3) return false;
+    const used = new Set<Person>();
+    const pitcher = (likes: Trait[], skill?: string, not: Person[] = []) => {
+      const c = pool.filter(p => !used.has(p) && !not.includes(p));
+      const best = c.filter(p => (skill && p.per.skill === skill) || likes.some(t => has(p.per, t)));
+      const p = pickOf(best.length ? best : c); if (p) used.add(p); return p;
+    };
+    const cands: (() => GoalOpt | null)[] = [];
+    const n = g.people.length, low = (v: number) => v < n * 0.8;
+    // someone missing comes first
+    const missing = g.people.find(p => (p.mode === 'lost' || p.mode === 'hurt') && g.disc.markers.some(m => m.who === p));
+    if (missing) cands.push(() => { const w = pitcher(['kind', 'brave'], undefined, []); return w && { kind: 'search', who: w, a: missing, title: `FIND ${missing.per.name.toUpperCase()}`, line: `${missing.per.name} is still out there. Nothing else matters today.` }; });
+    const food = g.disc.nearestKnown('food', g.fire), water = g.disc.nearestKnown('water', g.fire);
+    if (food && low(g.stock.totalFood)) cands.push(() => { const w = pitcher(['hardworking'], 'cook'); return w && { kind: 'food', who: w, title: 'STOCK UP ON FOOD', line: "The pile's almost empty. Everyone gathers food today." }; });
+    if (water && low(g.stock.water)) cands.push(() => { const w = pitcher(['hardworking', 'calm']); return w && { kind: 'water', who: w, title: 'FETCH WATER', line: "We're nearly out of water. Let's fill every jug." }; });
+    const rest: (() => GoalOpt | null)[] = [];
+    if (food && !low(g.stock.totalFood)) rest.push(() => { const w = pitcher(['hardworking'], 'cook'); return w && { kind: 'food', who: w, title: 'STOCK UP ON FOOD', line: "Let's build up the food pile while we can." }; });
+    if (water && !low(g.stock.water)) rest.push(() => { const w = pitcher(['calm']); return w && { kind: 'water', who: w, title: 'FETCH WATER', line: 'More water. You can never have too much.' }; });
+    rest.push(() => { const w = pitcher(['lazy', 'kind']); return w && { kind: 'rest', who: w, title: 'REST AND RECOVER', line: g.people.some(p => p.hurt) ? 'People are hurt. We should rest today and heal.' : "We're exhausted. One quiet day. Please." }; });
+    const mk = g.disc.markers.filter(m => m.kind === '?').sort((a, b) => Math.hypot(a.x - g.fire.x, a.z - g.fire.z) - Math.hypot(b.x - g.fire.x, b.z - g.fire.z))[0];
+    const unknown = g.disc.pois.find(q => q.major && !q.known);
+    if (mk) rest.push(() => { const w = pitcher(['brave', 'curious']); return w && { kind: 'explore', who: w, x: mk.x, z: mk.z, title: 'CHECK THE RUMOR', line: `Let's send people to see if it's true: "${mk.text}".` }; });
+    else if (unknown) rest.push(() => { const w = pitcher(['brave', 'curious']), d = dirName(unknown.x - g.fire.x, unknown.z - g.fire.z); return w && { kind: 'explore', who: w, x: unknown.x, z: unknown.z, title: `EXPLORE ${d.toUpperCase()}`, line: `Nobody has been ${d} yet. Let's send people out.` }; });
+    for (const k of ['signalFire', 'sos', 'rainCatcher'] as PropKind[]) if (!g.stock.has(k)) rest.push(() => { const w = pitcher(['hardworking'], 'builder'); return w && { kind: 'build', who: w, prop: k, title: `BUILD ${PROP_TEXT[k].toUpperCase()}`, line: `If we all pitch in, we can build ${PROP_TEXT[k]} today.` }; });
+    if (!R.wreckDone) rest.push(() => { const w = pitcher(['brave'], 'mechanic'); return w && { kind: 'salvage', who: w, title: 'STRIP THE WRECK', line: "There's still stuff in that plane. Let's take it apart, carefully." }; });
+    const ra = pool.find(a => pool.some(b => b !== a && S.rel(a, b) < -30));
+    const rb = ra && pool.find(b => b !== ra && S.rel(ra, b) < -30);
+    if (ra && rb) rest.push(() => { const w = pitcher(['calm', 'kind'], undefined, [ra, rb]); return w && { kind: 'mend', who: w, a: ra, b: rb, title: 'CLEAR THE AIR', line: `${ra.per.name} and ${rb.per.name} need to sort things out before someone gets hurt.` }; });
+    rest.sort(() => Math.random() - 0.5);
+    const out: GoalOpt[] = [];
+    for (const c of [...cands, ...rest]) {
+      if (out.length >= 3) break;
+      const o = c(); if (!o || out.some(x => x.kind === o.kind)) { if (o) used.delete(o.who); continue; }
+      out.push(o);
+    }
+    if (out.length < 2) return false;
+    this.opts = out; this.cur = null;
+    // everyone gathers at the fire; the three make their case
+    const F = g.fire, at = g.people.filter(p => p.mode === 'camp' && !p.hurt && p.act !== 'job' && p.act !== 'ask' && p.pose !== 'sleep');
+    at.forEach((p, i) => {
+      const a = (i / at.length) * 6.28 + 0.4, r = 3 + (i % 2);
+      p.act = 'huddle'; p.carry = 0; p.partner = null; g.bodies.go(p, F.x + Math.cos(a) * r, F.z + Math.sin(a) * r);
+    });
+    out.forEach((o, i) => setTimeout(() => { if (this.opts.includes(o)) { S.say(o.who, o.line, 4.5); o.who.poseO = 'point'; o.who.poseT = 1.5; } }, 1500 + i * 2600));
+    S.log(`Morning. Everyone gathered at the fire to decide what to do today.`);
+    g.onAsk();
+    g.hint('goal', 'Every morning the group suggests a plan for the day. Pick one, and camp works on it by itself.');
+    return true;
+  }
+
+  /** Things that start the moment a plan is picked. */
+  private begin(o: GoalOpt) {
+    const g = this.g, S = g.story, R = g.requests, L = g.leader!;
+    const crew = (n: number) => [o.who, ...g.people.filter(p => p !== o.who && p !== L && p.mode === 'camp' && !p.hurt && !R.busy(p) && p.act !== 'ask' && has(p.per, 'lazy') === false)].slice(0, n);
+    switch (o.kind) {
+      case 'explore': {
+        const v = g.people.filter(p => p !== L && p.mode === 'camp' && !p.hurt && (has(p.per, 'brave') || has(p.per, 'curious') || p === o.who) && !g.scouting.refusal(p)).slice(0, 2);
+        for (const p of v) g.scouting.send(p, o.x!, o.z!);
+        if (!v.length) S.say(o.who, "...Nobody wants to go. Typical.");
+        break;
+      }
+      case 'build': {
+        const good = Math.random() < 0.85;
+        R.job(crew(3), R.spot(o.prop!), 'build', 70, () => {
+          if (good) { R.build(o.prop!); S.toast(`Everyone pitched in. We built ${PROP_TEXT[o.prop!]}!`, 'good'); S.log(`We built ${PROP_TEXT[o.prop!]} together.`); g.onSting(true); }
+          else { S.toast(`The ${PROP_TEXT[o.prop!].replace(/^(a|an) /, '')} didn't hold together.`, 'bad'); S.log(`We tried to build ${PROP_TEXT[o.prop!]}. It didn't work out.`); g.onSting(false); }
+        });
+        break;
+      }
+      case 'salvage': {
+        const c = crew(3), good = Math.random() < 0.85;
+        R.job(c, R.spot('wreck'), 'search', 50, () => {
+          if (good) { R.wreckDone = true; g.stock.add('snacks', 8); g.stock.add('water', 6); S.toast('We stripped the wreck: snacks, water bottles, a knife.', 'good'); S.log('We took the wreck apart and found snacks and bottled water.'); g.onSting(true); }
+          else { const p = pickOf(c); p.hurt = true; g.startHealing(p); S.toast(`${p.per.name} got cut on the wreck. We found nothing.`, 'bad', p); g.onSting(false); }
+        });
+        break;
+      }
+      case 'mend': {
+        const a = o.a!, b = o.b!;
+        if (a.mode === 'camp' && b.mode === 'camp') { a.act = 'talk'; a.partner = b; a.actT = 25; b.act = 'listen'; b.partner = a; b.actT = 25; b.path = []; g.bodies.go(a, b.x + 1.2, b.z); }
+        break;
+      }
+      case 'search': for (const p of g.people) if (p.mode === 'camp' && Math.random() < 0.4) S.say(p, 'Hang on. We\'re coming.'); break;
+    }
+  }
+
+  private judge() {
+    const g = this.g, S = g.story, o = this.cur!, n = g.people.length;
+    this.judged = true;
+    let met = true, text = '';
+    switch (o.kind) {
+      case 'food': met = g.stock.today.food >= n * 0.8; text = met ? 'The food pile is full tonight.' : "We didn't gather nearly enough food."; break;
+      case 'water': met = g.stock.today.water >= n * 0.8; text = met ? 'Every jug is full.' : 'Still short on water.'; break;
+      case 'rest': text = 'A quiet day. People feel a little better.'; for (const p of g.people) if (p.mode === 'camp') S.mood(p, 'happy', 20); break;
+      case 'explore': met = g.lastFind > this.start; text = met ? 'The scouts turned something up.' : 'Nothing new today.'; break;
+      case 'build': met = g.stock.has(o.prop!); text = met ? `${PROP_TEXT[o.prop!].charAt(0).toUpperCase() + PROP_TEXT[o.prop!].slice(1)} is standing.` : 'All that work, and nothing to show for it.'; break;
+      case 'salvage': met = g.requests.wreckDone; text = met ? 'The wreck gave us what it had.' : 'The wreck gave us nothing.'; break;
+      case 'mend': { const a = o.a!, b = o.b!; S.addRel(a, b, 15); S.say(a, `Okay, ${b.per.name}. We're good.`); text = `${a.per.name} and ${b.per.name} made peace. For now.`; break; }
+      case 'search': met = !(o.a!.mode === 'lost' || o.a!.mode === 'hurt'); text = met ? `${o.a!.per.name} is safe.` : `${o.a!.per.name} is still out there.`; break;
+    }
+    S.toast(`Today's plan: ${text}`, met ? 'good' : 'bad', o.who);
+    S.log(text);
+    S.trustAll(met ? 2 : -1, g.leader); if (met) S.trust(o.who, 1);
+  }
+}

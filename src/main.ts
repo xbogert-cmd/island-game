@@ -23,6 +23,9 @@ requestAnimationFrame(() => setTimeout(() => {
   g.onWhistle = () => audio.whistle();
   g.onAlarm = () => audio.alarm();
   g.onChime = (big) => audio.chime(big);
+  g.onAsk = () => audio.attention();
+  g.onSting = (good) => audio.sting(good);
+  g.onClunk = () => { const t = game.rig.target, P = g.stock.pile; if (Math.hypot(P.x - t.x, P.z - t.z) < game.viewR * 0.6) audio.clunk(); };
   g.story.onSay = (p) => { const t = game.rig.target; if (Math.hypot(p.x - t.x, p.z - t.z) < game.viewR) audio.blip(p.per.voice); };
   game.every((dt) => {
     const t = game.rig.target, wx = game.weather;

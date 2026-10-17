@@ -9,7 +9,7 @@ import { Particles } from './particles';
 export const SW = 20, SH = 26, FEET = 24;
 const shade = (h: string, f: number) => { const c = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) * f | 0); return `rgb(${c[0]},${c[1]},${c[2]})`; };
 
-export type Pose = 'idle' | 'walk' | 'run' | 'limp' | 'sit' | 'sleep' | 'cover' | 'search' | 'collect' | 'point' | 'wave' | 'whistle' | 'cheer' | 'argue' | 'slump' | 'startle' | 'fish';
+export type Pose = 'idle' | 'walk' | 'run' | 'limp' | 'sit' | 'sleep' | 'cover' | 'search' | 'collect' | 'point' | 'wave' | 'whistle' | 'cheer' | 'argue' | 'slump' | 'startle' | 'fish' | 'eat' | 'build';
 export type Mode = 'asleep' | 'camp' | 'leader' | 'follow' | 'wait' | 'scout' | 'lost' | 'hurt' | 'rescued';
 export type Mood = 'none' | 'happy' | 'angry' | 'worried' | 'sad' | 'scared' | 'tired' | 'fond' | 'pain';
 export interface Pt { x: number; z: number }
@@ -26,13 +26,18 @@ export interface Person {
   torch: boolean; carry: 0 | 1 | 2; hurt: boolean; heal: number;
   mood: Mood; tmood: Mood; moodT: number; why: string;
   apart: number; apartHit: boolean;
+  /** wants to ask the leader something (shows a ❗) */
+  ask: boolean;
+  /** what they are carrying to the pile */
+  bring: string;
+  hungry: boolean;
   step: number;
 }
 
 const MOOD_ICON: Record<Mood, string> = { none: '', happy: 'mHappy', angry: 'mAngry', worried: 'mWorry', sad: 'mSad', scared: 'mScared', tired: 'mSleep', fond: 'mFond', pain: 'mPain' };
-const FRAME_RATE: Partial<Record<Pose, number>> = { walk: 9, run: 13, limp: 6, wave: 4, argue: 5, cheer: 5, collect: 3, search: 1.5, startle: 0, fish: 0.5 };
+const FRAME_RATE: Partial<Record<Pose, number>> = { walk: 9, run: 13, limp: 6, wave: 4, argue: 5, cheer: 5, collect: 3, search: 1.5, startle: 0, fish: 0.5, eat: 2, build: 4 };
 
-type Arm = 'down' | 'fwd' | 'up' | 'out' | 'mouth' | 'torch' | 'bucket' | 'carry' | 'reach' | 'fist' | 'rod';
+type Arm = 'down' | 'fwd' | 'up' | 'out' | 'mouth' | 'torch' | 'bucket' | 'carry' | 'reach' | 'fist' | 'rod' | 'hamUp' | 'hamDown' | 'food';
 
 /** Pixel rectangles for one survivor frame, built facing right then mirrored. */
 export function personRects(p: Person) {
@@ -66,6 +71,8 @@ export function personRects(p: Person) {
     case 'slump': t = 1; hx = 1; break;
     case 'startle': t = -2; fa = 'out'; ba = 'out'; break;
     case 'fish': fa = 'rod'; break;
+    case 'eat': sit = true; t = 2; fa = ph % 2 ? 'mouth' : 'food'; break;
+    case 'build': crouch = true; t = 2; hx = 1; fa = ph % 2 ? 'hamUp' : 'hamDown'; break;
   }
   if (p.carry === 1 && fa === 'down') fa = 'bucket';
   if (p.carry === 2 && fa === 'down') fa = 'carry';
@@ -92,6 +99,9 @@ export function personRects(p: Person) {
       case 'carry': r(x, -7 + t, 1, 2, c); r(x, -8 + t, 3, 2, '#e0a030'); r(x + 1, -9 + t, 1, 1, '#6bc06b'); break;
       case 'reach': r(x, -7 + t, 1, 2, c); r(x + d, -5 + t, 1, 2, c); r(x + d, -3 + t, 1, 1, L.skin); break;
       case 'fist': r(x, -11 + t, 1, 3, c); r(x, -12 + t, 1, 1, L.skin); break;
+      case 'hamUp': r(x, -12 + t, 1, 4, c); r(x, -13 + t, 1, 1, L.skin); r(x - d, -15 + t, 3, 2, '#8a8a90'); break;
+      case 'hamDown': r(x, -8 + t, 3, 1, c); r(x + 3 * d, -8 + t, 1, 1, L.skin); r(x + 3 * d, -10 + t, 2, 3, '#8a8a90'); break;
+      case 'food': r(x, -7 + t, 1, 2, c); r(x, -8 + t, 2, 2, '#e0503a'); break;
       case 'rod': r(x, -8 + t, 2, 1, c); for (let k = 0; k < 5; k++) r(x + 1 + k, -9 - k + t, 1, 1, '#8a6a4a'); r(x + 6, -13 + t, 1, 9, '#cfd8e0'); break;
     }
   };
@@ -132,7 +142,7 @@ export class Survivors {
       this.people.push({
         id: i, per, x, z, face: side, pose: 'sleep', anim: Math.random() * 9, key: '', mode: 'asleep',
         path: [], repath: 0, stuck: 0, moving: false, act: '', actT: Math.random() * 3, ax: x, az: z, partner: null,
-        poseO: null, poseT: 0, torch: false, carry: 0, hurt: false, heal: 0, mood: 'none', tmood: 'none', moodT: 0, why: '', apart: 0, apartHit: false, step: 0,
+        poseO: null, poseT: 0, torch: false, carry: 0, hurt: false, heal: 0, mood: 'none', tmood: 'none', moodT: 0, why: '', apart: 0, apartHit: false, step: 0, ask: false, bring: '', hungry: false,
       });
     }
   }
@@ -208,7 +218,10 @@ export class Survivors {
         if (Math.random() < 0.05) this.fx.emit('dot1', p.x + rr.x * dx, h + 2.1, p.z + rr.z * dx, { vy: 1.5, vx: (Math.random() - 0.5) * 0.6, max: 0.7, r: 1, g: 0.65, b: 0.25, emissive: true, fade: false });
       }
       const icon = MOOD_ICON[p.mood];
-      if (icon && p.pose !== 'sleep') {
+      if (p.ask) {
+        const bob = Math.sin(p.anim * 6) > 0 ? 1 : 0;
+        main.push(p.x, y + (SH - FEET + 17 + bob - lift) * this.yUp, p.z, ATLAS.askMark[0], false, 1, 1, 1, 2);
+      } else if (icon && p.pose !== 'sleep') {
         const bob = Math.sin(p.anim * 3) > 0 ? 1 : 0, fr2 = ATLAS[icon][Math.floor(p.anim * 2) % ATLAS[icon].length];
         main.push(p.x, y + (SH - FEET + 16 + bob - lift + (p.pose === 'sit' ? -2 : p.pose === 'search' || p.pose === 'collect' ? -3 : 0)) * this.yUp, p.z, fr2, false, 1, 1, 1, 2);
       } else if (icon && p.pose === 'sleep') {

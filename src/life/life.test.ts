@@ -3,6 +3,7 @@ import { makePeople } from './persona';
 import { WalkGrid } from './path';
 import { B, N, World, generate } from '../world/island';
 import { rumorError } from './scouting';
+import { Stock } from './stock';
 
 function flatWorld(): World {
   const h = new Float32Array(N * N).fill(2), biome = new Uint8Array(N * N).fill(B.Grass);
@@ -66,5 +67,27 @@ describe('rumors', () => {
     expect(brave.r).toBeLessThan(coward.r);
     expect(nav.off).toBe(0);
     expect(coward.off).toBeGreaterThan(brave.off);
+  });
+});
+
+describe('stockpile', () => {
+  const grid = { walkable: () => true } as unknown as WalkGrid;
+  it('never goes negative and reports who went hungry', () => {
+    const s = new Stock({ x: 100, z: 100 }, grid);
+    expect(s.meal(10)).toBe(0);                      // 16 snacks, 16 water
+    expect(s.meal(10)).toBe(4);                      // 6 left of each
+    expect(s.totalFood).toBe(0); expect(s.water).toBe(0);
+    expect(s.meal(5)).toBe(5);
+    expect(s.takeFood(3)).toBe(0); expect(s.totalFood).toBe(0);
+  });
+  it('half rations stretch food twice as far', () => {
+    const s = new Stock({ x: 100, z: 100 }, grid);
+    s.ration = 2;
+    expect(s.meal(20)).toBe(0); expect(s.totalFood).toBe(6);
+  });
+  it('counts what came in today', () => {
+    const s = new Stock({ x: 100, z: 100 }, grid);
+    s.add('fruit', 2); s.add('water', 3); s.add('fish', 4);
+    expect(s.today).toEqual({ food: 6, water: 3 });
   });
 });
