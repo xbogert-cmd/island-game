@@ -8,6 +8,7 @@ import { Jobs, level } from './jobs';
 import { BUILD, BKind, stageCost } from './buildings';
 import type { Person } from './people';
 import { Health } from './health';
+import { Crew } from './crew';
 
 function flatWorld(): World {
   const h = new Float32Array(N * N).fill(2), biome = new Uint8Array(N * N).fill(B.Grass);
@@ -121,6 +122,25 @@ describe('jobs', () => {
       const st = stageCost(k), c = BUILD[k].cost;
       for (const m of Object.keys(c) as (keyof typeof c)[]) expect(st[m]! * 3).toBeGreaterThanOrEqual(c[m]!);
     }
+  });
+});
+
+describe('crew', () => {
+  const mk = (id: number, extra: Partial<Person> = {}) => ({ id, per: { traits: [], skill: 'none', strength: 'strong', weakness: 'clumsy' }, xp: {}, job: '', outAt: -1e9, outLike: 0, pose: 'idle', ...extra }) as unknown as Person;
+  const crew = (rel: (x: Person, y: Person) => number = () => 0) => {
+    const C = Object.create(Crew.prototype) as Crew;
+    (C as unknown as { g: unknown }).g = { story: { rel }, clock: { minutes: 3000, night: 0 }, goals: { cur: null }, jobs: { prio: {} } };
+    return C;
+  };
+  it('takes turns: whoever was just out ranks below whoever has not been', () => {
+    const C = crew(), back = mk(0, { outAt: 2990 }), rested = mk(1, { outAt: 0 });
+    expect(C.score(rested, [])).toBeGreaterThan(C.score(back, []));
+  });
+  it('puts friends together before rivals, and likes count', () => {
+    const rel = (x: Person, y: Person) => { const k = [x.id, y.id].sort().join(); return k === '0,1' ? 60 : k === '0,2' ? -60 : 0; };
+    const C = crew(rel), a = mk(0), friend = mk(1), rival = mk(2);
+    expect(C.score(friend, [a])).toBeGreaterThan(C.score(rival, [a]));
+    expect(C.score(mk(3, { outLike: 1 }), [])).toBeGreaterThan(C.score(mk(4, { outLike: -1 }), []));
   });
 });
 
