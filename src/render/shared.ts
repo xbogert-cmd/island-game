@@ -23,11 +23,13 @@ export const U = {
   uBiome: { value: null as THREE.Texture | null },
   uN: { value: 768 },
   uPX: { value: PX },
+  /** 0 = smooth, 1 = gritty: scales single-pixel noise in the ground and water shaders. */
+  uGrain: { value: 0.3 },
 };
 
 /** GLSL helpers: integer screen-pixel coordinates of a world point (stable while the camera pans), hashing and value noise. */
 export const GLSL_COMMON = /* glsl */ `
-uniform float uTime, uWind, uCloud, uWet, uTide, uNight, uN, uPX;
+uniform float uTime, uWind, uCloud, uWet, uTide, uNight, uN, uPX, uGrain;
 uniform vec2 uWindDir, uCloudOff;
 uniform vec3 uCamRight, uCamUp, uAmbient, uSunDir;
 uniform sampler2D uHeight, uBiome;

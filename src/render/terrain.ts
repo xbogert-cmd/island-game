@@ -21,52 +21,54 @@ export function uploadWorldTextures(w: World) {
 
 const GROUND = /* glsl */ `
 vec3 P = vWorld; vec2 pc = pixCoord(P);
-float r = h21(pc);
-vec2 jit = (vec2(h21(pc + 3.1), h21(pc + 7.7)) - 0.5) * 1.6;
+float r = h21(pc), G = uGrain;
+float cl = vn(pc * 0.4);                         // soft 2-3px clumps instead of single-pixel noise
+vec2 jit = (vec2(h21(pc + 3.1), h21(pc + 7.7)) - 0.5) * (0.35 + G * 1.25);
 vec4 bd = texture2D(uBiome, (P.xz + jit + 0.5) / uN);
 float bio = floor(bd.r * 255.0 + 0.5);
 float slope = 1.0 - clamp(vWN.y, 0.0, 1.0);
-float patchv = vn(P.xz * 0.22) * 0.7 + vn(P.xz * 0.9) * 0.3 + (r - 0.5) * 0.1;
+float patchv = vn(P.xz * 0.22) * 0.7 + vn(P.xz * 0.9) * 0.3 + (mix(cl, r, G) - 0.5) * 0.1;
 vec3 col; float tuftDens = 0.0, flowerDens = 0.0; vec3 tuftCol = vec3(0.18, 0.43, 0.2), tipCol = vec3(0.44, 0.75, 0.33);
 if (bio < 0.5 || bio > 10.5) {                      // sea / lake / lagoon bed
   col = mix(vec3(0.86, 0.78, 0.56), vec3(0.55, 0.62, 0.5), step(0.6, patchv));
 } else if (bio < 1.5) {                              // beach
-  col = r < 0.16 ? vec3(0.878, 0.78, 0.557) : vec3(0.937, 0.863, 0.651);
-  if (r > 0.993) col = vec3(0.98, 0.965, 0.91);
-  if (P.y - uTide < 0.13 + (r - 0.5) * 0.06) col = vec3(0.80, 0.69, 0.48) + (r - 0.5) * 0.03;
+  col = cl > 0.74 - G * 0.1 ? vec3(0.9, 0.8, 0.58) : vec3(0.937, 0.863, 0.651);
+  if (r > 1.0 - 0.007 * G) col = vec3(0.98, 0.965, 0.91);
+  if (P.y - uTide < 0.13 + (cl - 0.5) * 0.06) col = vec3(0.80, 0.69, 0.48);
 } else if (bio < 2.5 || (bio > 7.5 && bio < 8.5)) { // grass + flower fields
   col = patchv > 0.6 ? vec3(0.49, 0.77, 0.36) : patchv > 0.48 ? vec3(0.42, 0.72, 0.32) : patchv > 0.36 ? vec3(0.37, 0.66, 0.3) : vec3(0.31, 0.59, 0.27);
-  if (r < 0.035) col = vec3(0.27, 0.53, 0.24); else if (r > 0.982) col = vec3(0.6, 0.83, 0.42);
+  if (r < 0.035 * G) col = vec3(0.27, 0.53, 0.24); else if (r > 1.0 - 0.018 * G) col = vec3(0.6, 0.83, 0.42);
   tuftDens = 0.022; flowerDens = bio > 7.5 ? 0.09 : 0.006;
   tuftCol = vec3(0.26, 0.52, 0.22); tipCol = vec3(0.6, 0.84, 0.42);
 } else if (bio < 3.5 || (bio > 6.5 && bio < 7.5)) { // jungle + bamboo floor
   col = patchv > 0.6 ? vec3(0.27, 0.55, 0.25) : patchv > 0.46 ? vec3(0.22, 0.48, 0.21) : patchv > 0.34 ? vec3(0.19, 0.42, 0.19) : vec3(0.16, 0.36, 0.17);
   if (bio > 6.5) col = mix(col, vec3(0.45, 0.6, 0.25), 0.35);
-  if (r < 0.05) col = vec3(0.36, 0.33, 0.17); else if (r > 0.985) col = vec3(0.4, 0.62, 0.3);
+  if (cl > 0.8 - G * 0.06) col = mix(col, vec3(0.36, 0.33, 0.17), 0.6); else if (r > 1.0 - 0.015 * G) col = vec3(0.4, 0.62, 0.3);
   tuftDens = 0.03; tuftCol = vec3(0.12, 0.3, 0.13); tipCol = vec3(0.32, 0.6, 0.28); flowerDens = 0.0015;
 } else if (bio < 4.5) {                              // highland: rocky grass
-  float rocky = step(0.55, vn(P.xz * 0.35) + (r - 0.5) * 0.2);
-  col = mix(patchv > 0.5 ? vec3(0.47, 0.62, 0.33) : vec3(0.41, 0.56, 0.3), r < 0.5 ? vec3(0.6, 0.56, 0.48) : vec3(0.53, 0.49, 0.42), rocky);
+  float rocky = step(0.55, vn(P.xz * 0.35) + (mix(cl, r, G) - 0.5) * 0.2);
+  col = mix(patchv > 0.5 ? vec3(0.47, 0.62, 0.33) : vec3(0.41, 0.56, 0.3), cl < 0.5 ? vec3(0.6, 0.56, 0.48) : vec3(0.53, 0.49, 0.42), rocky);
   tuftDens = 0.012 * (1.0 - rocky); tuftCol = vec3(0.3, 0.45, 0.22); tipCol = vec3(0.62, 0.72, 0.4);
 } else if (bio < 5.5) {                              // volcanic rock + ash
   col = patchv > 0.55 ? vec3(0.44, 0.41, 0.39) : patchv > 0.42 ? vec3(0.37, 0.34, 0.33) : vec3(0.31, 0.29, 0.28);
-  if (r < 0.06) col = vec3(0.24, 0.22, 0.21); else if (r > 0.97) col = vec3(0.55, 0.52, 0.49);
+  if (r < 0.06 * G) col = vec3(0.24, 0.22, 0.21); else if (r > 1.0 - 0.03 * G) col = vec3(0.55, 0.52, 0.49);
 } else if (bio < 6.5) {                              // swamp
   col = patchv > 0.55 ? vec3(0.3, 0.38, 0.2) : patchv > 0.42 ? vec3(0.26, 0.33, 0.18) : vec3(0.22, 0.37, 0.35);
-  if (vn(P.xz * 0.5) > 0.68) col = vec3(0.23, 0.38, 0.38) + step(0.97, r) * 0.2;
+  if (vn(P.xz * 0.5) > 0.68) col = vec3(0.23, 0.38, 0.38) + step(1.0 - 0.03 * G, r) * 0.2;
   tuftDens = 0.035; tuftCol = vec3(0.2, 0.3, 0.14); tipCol = vec3(0.45, 0.55, 0.25);
 } else if (bio < 9.5) {                              // tide-pool rocks
-  col = r < 0.5 ? vec3(0.42, 0.42, 0.41) : vec3(0.5, 0.49, 0.47);
-  if (vn(P.xz * 0.6) > 0.64) col = vec3(0.25, 0.62, 0.68) + step(0.95, r) * 0.25;
+  col = cl < 0.5 ? vec3(0.42, 0.42, 0.41) : vec3(0.5, 0.49, 0.47);
+  if (vn(P.xz * 0.6) > 0.64) col = vec3(0.25, 0.62, 0.68) + step(1.0 - 0.05 * G, r) * 0.25;
 } else {                                             // dirt (camp, crash scar)
-  col = r < 0.55 ? vec3(0.64, 0.53, 0.35) : r < 0.82 ? vec3(0.55, 0.45, 0.29) : vec3(0.47, 0.38, 0.25);
+  float dv = mix(cl, r, G);
+  col = dv < 0.55 ? vec3(0.64, 0.53, 0.35) : dv < 0.75 ? vec3(0.55, 0.45, 0.29) : vec3(0.47, 0.38, 0.25);
 }
 // rock faces
 if (slope > 0.42 && bio > 0.5 && bio < 10.5) {
   float band = mod(floor(P.y * 1.6 + vn(P.xz * 0.35) * 1.3), 3.0);
   vec3 rc = band < 0.5 ? vec3(0.63, 0.56, 0.44) : band < 1.5 ? vec3(0.53, 0.47, 0.38) : vec3(0.44, 0.38, 0.3);
   if (bio > 4.5 && bio < 5.5) rc *= vec3(0.75, 0.74, 0.76);
-  if (r < 0.07) rc *= 0.8;
+  if (r < 0.07 * G) rc *= 0.8;
   if (h21(floor(pc / vec2(1.0, 4.0)) + 9.0) < 0.06) rc *= 0.62;
   col = rc; tuftDens = 0.0; flowerDens = 0.0;
 } else if (slope > 0.26 && tuftDens > 0.0) { col *= 0.72; }
