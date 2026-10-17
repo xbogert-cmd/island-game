@@ -9,6 +9,7 @@ export class CameraRig {
   cam = new THREE.OrthographicCamera(-1, 1, 1, -1, -400, 400);
   target = new THREE.Vector3();
   yaw = 0; yawT = 0;
+  private yawFrom = 0; private turnT = 1;
   zoomI = 1;
   W = 1; H = 1;
   private y = 0;
@@ -20,8 +21,8 @@ export class CameraRig {
     addEventListener('keydown', (e) => {
       if ((e.target as HTMLElement).tagName === 'INPUT') return;
       const k = e.key.toLowerCase(); this.keys.add(k);
-      if (k === 'q') this.yawT -= Math.PI / 2;
-      if (k === 'e') this.yawT += Math.PI / 2;
+      if (k === 'q') this.turn(-1);
+      if (k === 'e') this.turn(1);
     });
     addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
     addEventListener('blur', () => this.keys.clear());
@@ -37,6 +38,7 @@ export class CameraRig {
   }
 
   get zoom() { return ZOOMS[this.zoomI]; }
+  turn(dir: number) { this.yawFrom = this.yaw; this.yawT = Math.round(this.yaw / (Math.PI / 2)) * (Math.PI / 2) + dir * Math.PI / 2; this.turnT = 0; }
   setZoom(i: number) { this.zoomI = Math.max(0, Math.min(ZOOMS.length - 1, i)); this.onResize(); }
 
   /** Pan in screen directions (right, down) by world units. */
@@ -58,8 +60,12 @@ export class CameraRig {
     if (this.keys.has('arrowup') || this.keys.has('w')) d -= sp;
     if (this.keys.has('arrowdown') || this.keys.has('s')) d += sp;
     if (r || d) this.pan(r, d);
-    this.yaw += (this.yawT - this.yaw) * Math.min(1, dt * 7);
-    if (Math.abs(this.yawT - this.yaw) < 1e-3) this.yaw = this.yawT;
+    if (this.turnT < 1) {
+      this.turnT = Math.min(1, this.turnT + dt / 0.7);
+      const k = this.turnT, e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;   // ease in-out
+      this.yaw = this.yawFrom + (this.yawT - this.yawFrom) * e;
+      if (this.turnT === 1) this.yaw = this.yawT;
+    }
     // follow the ground height (sampled over an area so it does not jitter)
     let hs = 0; for (const [ox, oz] of [[0, 0], [12, 0], [-12, 0], [0, 12], [0, -12]]) hs += Math.max(0, heightAt(this.world, this.target.x + ox, this.target.z + oz));
     this.y += (hs / 5 - this.y) * Math.min(1, dt * 3);
@@ -78,6 +84,8 @@ export class CameraRig {
     const dr = Math.round(pr / PX) * PX - pr, du = Math.round(pu / PX) * PX - pu;
     cam.position.x += rx * dr + ux * du; cam.position.y += ry * dr + uy * du; cam.position.z += rz * dr + uz * du;
     cam.updateMatrixWorld();
-    U.uCamRight.value.set(rx, ry, rz); U.uCamUp.value.set(ux, uy, uz);
+    const sy = Math.round(this.yaw / (Math.PI / 2)) * (Math.PI / 2), cs = Math.cos(sy), sn = Math.sin(sy);
+    if (Math.abs(sy - this.yaw) < 1e-9) { U.uCamRight.value.set(rx, ry, rz); U.uCamUp.value.set(ux, uy, uz); }
+    else { U.uCamRight.value.set(cs, 0, -sn); U.uCamUp.value.set(-sn * Math.sin(PITCH), Math.cos(PITCH), -cs * Math.sin(PITCH)); }
   }
 }

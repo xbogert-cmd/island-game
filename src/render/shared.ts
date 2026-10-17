@@ -24,7 +24,7 @@ export const U = {
   uN: { value: 768 },
   uPX: { value: PX },
   /** 0 = smooth, 1 = gritty: scales single-pixel noise in the ground and water shaders. */
-  uGrain: { value: 0.65 },
+  uGrain: { value: 1 },
 };
 
 /** GLSL helpers: integer screen-pixel coordinates of a world point (stable while the camera pans), hashing and value noise. */

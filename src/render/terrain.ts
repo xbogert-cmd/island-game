@@ -23,7 +23,7 @@ const GROUND = /* glsl */ `
 vec3 P = vWorld; vec2 pc = pixCoord(P);
 float r = h21(pc), G = uGrain;
 float cl = vn(pc * 0.4);                         // soft 2-3px clumps instead of single-pixel noise
-vec2 jit = (vec2(h21(pc + 3.1), h21(pc + 7.7)) - 0.5) * (0.35 + G * 1.25);
+vec2 jit = (vec2(h21(pc + 3.1), h21(pc + 7.7)) - 0.5) * (0.3 + G * 0.45);
 vec4 bd = texture2D(uBiome, (P.xz + jit + 0.5) / uN);
 float bio = floor(bd.r * 255.0 + 0.5);
 float slope = 1.0 - clamp(vWN.y, 0.0, 1.0);

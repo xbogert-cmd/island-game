@@ -23,7 +23,8 @@ void main(){
   vec3 P = vWorld; vec2 pc = pixCoord(P);
   float r = h21(pc), r2 = h21(pc + 13.7);
   float th = terrainH(P.xz);
-  float d = P.y - th + (r - 0.5) * 0.08 * uGrain;
+  float WG = uGrain * 0.25;
+  float d = P.y - th + (r - 0.5) * 0.08 * WG;
   vec4 bd = texture2D(uBiome, (P.xz + 0.5) / uN);
   float bio = floor(bd.r * 255.0 + 0.5);
   vec3 c;
@@ -34,7 +35,7 @@ void main(){
   else if (d < 9.0) c = vec3(0.12, 0.38, 0.62);
   else c = vec3(0.10, 0.30, 0.55);
   if (bio > 11.5 && bio < 12.5) c = mix(vec3(0.24, 0.78, 0.8), vec3(0.42, 0.86, 0.8), step(0.55, vn(P.xz * 0.15) + (r - 0.5) * 0.1)); // lagoon: clear turquoise with sandy patches
-  if ((bio > 10.5 && bio < 12.5) && r2 < 0.05 * (0.3 + uGrain) && d < 1.0) {                     // coral specks
+  if ((bio > 10.5 && bio < 12.5) && r2 < 0.05 * (0.3 + WG) && d < 1.0) {                     // coral specks
     float k = h21(pc + 4.0); c = k < 0.33 ? vec3(0.95, 0.55, 0.55) : k < 0.66 ? vec3(0.98, 0.72, 0.4) : vec3(0.7, 0.55, 0.9);
   }
   c = mix(c, uTint, uSpring);
@@ -42,18 +43,18 @@ void main(){
   float row = pc.y;
   float spd = 4.0 + 6.0 * h21(vec2(row, 3.0)) + uWind * 10.0;
   float seg = floor((pc.x + uTime * spd) / 9.0);
-  float dash = step(h21(vec2(seg, row)), (0.014 + uWind * 0.07) * (0.6 + uGrain)) * step(mod(row, 4.0), 0.5);
+  float dash = step(h21(vec2(seg, row)), (0.01 + uWind * 0.06) * (0.6 + WG)) * step(mod(row, 4.0), 0.5);
   if (d > 1.0) c = mix(c, min(vec3(1.0), c * 1.3 + 0.08), dash);
   if (d > 2.5 && uWind > 0.6 && r < (uWind - 0.6) * 0.05) c = vec3(0.92, 0.96, 1.0);   // storm whitecaps
   // shoreline foam and incoming waves
   float lap = 0.07 + 0.05 * sin(uTime * 1.4 + P.x * 0.31 + P.z * 0.23);
-  if (d < lap && r < 1.0 - 0.08 * uGrain && bio < 11.5) c = vec3(0.95, 0.98, 1.0);
+  if (d < lap && r < 1.0 - 0.08 * WG && bio < 11.5) c = vec3(0.95, 0.98, 1.0);
   float band = fract(uTime * 0.16 + vn(P.xz * 0.06) * 2.0);
   float wd = mix(1.1, 0.12, band);
   if (bio < 10.5 && d < 1.3 && abs(d - wd) < 0.035 + uWind * 0.02 && r < 0.3 + band * 0.5) c = mix(c, vec3(0.95, 0.98, 1.0), 0.35 + band * 0.5);
   if (bio > 10.5 && bio < 11.5 && r < 0.35 + 0.3 * sin(uTime * 2.0 + P.x * 0.5)) c = vec3(0.95, 0.98, 1.0); // breakers on reef
   // sun glints by day
-  if (r > 1.0 - (0.0015 + uWind * 0.003) * (0.3 + uGrain) && uNight < 0.5) c = vec3(1.0);
+  if (r > 1.0 - (0.0015 + uWind * 0.003) * (0.3 + WG) && uNight < 0.5) c = vec3(1.0);
   c *= mix(1.0, 0.8, cloudShade(P.xz));
   c *= uAmbient;
   gl_FragColor = vec4(c, 1.0);
