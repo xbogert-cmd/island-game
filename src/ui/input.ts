@@ -60,6 +60,7 @@ export class Input {
     const z = this.game.rig.zoom, w = this.game.world;
     let best: Person | null = null, bd = 1e9;
     for (const p of this.game.group.people) {
+      if (p.mode === 'dead') continue;
       const s = this.screen(p.x, heightAt(w, p.x, p.z), p.z);
       const dx = cx - s.x, dy = s.y - cy;
       if (Math.abs(dx) < 6 * z && dy > -3 * z && dy < 18 * z) { const d = Math.abs(dx) + Math.abs(dy - 8 * z); if (d < bd) { bd = d; best = p; } }

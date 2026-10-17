@@ -1,14 +1,20 @@
 import { Pt } from './people';
 import type { WalkGrid } from './path';
 
-export type Food = 'snacks' | 'fruit' | 'coconut' | 'shell' | 'fish';
-export const FOODS: Food[] = ['snacks', 'fruit', 'coconut', 'shell', 'fish'];
+export type Food = 'snacks' | 'fruit' | 'coconut' | 'shell' | 'fish' | 'meat';
+export const FOODS: Food[] = ['snacks', 'fruit', 'coconut', 'shell', 'fish', 'meat'];
+export type Tool = 'knife' | 'axe' | 'spear' | 'basket' | 'rope';
+export const TOOLS: Tool[] = ['knife', 'axe', 'spear', 'basket', 'rope'];
+export const TOOL_COST: Record<Tool, Partial<Record<Mat, number>>> = { knife: { scrap: 1, wood: 1 }, axe: { stone: 2, wood: 2, vines: 1 }, spear: { wood: 2, stone: 1, vines: 1 }, basket: { vines: 3 }, rope: { vines: 2 } };
 export type Mat = 'wood' | 'bamboo' | 'stone' | 'vines' | 'scrap';
 export const MATS: Mat[] = ['wood', 'bamboo', 'stone', 'vines', 'scrap'];
 
 /** What the camp has: the food, water and material heaps by the fire. No numbers on screen, only piles and words. */
 export class Stock {
-  food: Record<Food, number> = { snacks: 16, fruit: 0, coconut: 0, shell: 0, fish: 0 };
+  food: Record<Food, number> = { snacks: 16, fruit: 0, coconut: 0, shell: 0, fish: 0, meat: 0 };
+  tools: Record<Tool, number> = { knife: 0, axe: 0, spear: 0, basket: 0, rope: 0 };
+  toolKnown = new Set<Tool>();
+  hides = 0; cured = 0;
   water = 16;            // the plane's bottles, then jugs from the river
   stolen = 0;            // hidden away by a hoarder
   ration = 0;            // days of half portions left
@@ -33,7 +39,7 @@ export class Stock {
   /** Take up to n food, oldest-spoiling first. Returns how much was taken. */
   takeFood(n: number) {
     let got = 0;
-    for (const f of ['fish', 'shell', 'fruit', 'coconut', 'snacks'] as Food[]) { const k = Math.min(this.food[f], n - got); this.food[f] -= k; got += k; if (got >= n) break; }
+    for (const f of ['meat', 'fish', 'shell', 'fruit', 'coconut', 'snacks'] as Food[]) { const k = Math.min(this.food[f], n - got); this.food[f] -= k; got += k; if (got >= n) break; }
     return got;
   }
   takeWater(n: number) { const k = Math.min(this.water, n); this.water -= k; return k; }
@@ -54,9 +60,9 @@ export class Stock {
   }
 
   /** Each dawn fresh food goes off a little. Storage halves it; a drying rack keeps fish. */
-  spoil(storage: boolean, rack: boolean) {
+  spoil(storage: boolean, rack: boolean, smoke = false) {
     const k = storage ? 0.5 : 1; let lost = 0;
-    for (const [f, r] of [['fruit', 0.25], ['shell', 0.3], ['fish', rack ? 0.06 : 0.35]] as [Food, number][]) { const n = Math.floor(this.food[f] * r * k); this.food[f] -= n; lost += n; }
+    for (const [f, r] of [['fruit', 0.25], ['shell', 0.3], ['fish', rack ? 0.06 : 0.35], ['meat', smoke ? 0.05 : 0.4]] as [Food, number][]) { const n = Math.floor(this.food[f] * r * k); this.food[f] -= n; lost += n; }
     return lost;
   }
 

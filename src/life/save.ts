@@ -32,14 +32,17 @@ export function save(game: Game) {
     leader: L.id, era: g.era, gday: (g as Any).day, lastFind: g.lastFind, firstAid: g.firstAid, mealDay: (g as Any).mealDay, recap: g.recap, stats: g.stats,
     people: g.people.map(p => ({
       x: p.x, z: p.z, mode: p.mode, face: p.face, trust: p.per.trust, weakness: p.per.weakness, hurt: p.hurt, heal: p.heal, hungry: p.hungry,
-      xp: p.xp, pin: p.pin, sleepIn: p.sleepIn, savedBy: p.savedBy, apart: p.apart, hateT: p.hateT,
+      xp: p.xp, pin: p.pin, sleepIn: p.sleepIn, savedBy: p.savedBy, apart: p.apart, hateT: p.hateT, health: p.health, hungerN: p.hungerN,
       troubleT: g.scouting.tripOf(p)?.troubleT ?? 0,
     })),
     rel: Array.from(g.story.relM), journal: g.story.journal, skillKnown: [...g.story.skillKnown], secretKnown: [...g.story.secretKnown],
     pois: g.disc.pois.map(q => [q.known ? 1 : 0, q.name]),
     markers: g.disc.markers.map(m => ({ x: m.x, z: m.z, r: m.r, kind: m.kind, text: m.text, fake: m.fake, poi: m.poi ? m.poi.id : -1, who: m.who ? m.who.id : -1 })),
     explored: b64(g.disc.explored),
-    stock: { food: g.stock.food, water: g.stock.water, stolen: g.stock.stolen, ration: g.stock.ration, mat: g.stock.mat, today: g.stock.today },
+    stock: { food: g.stock.food, water: g.stock.water, stolen: g.stock.stolen, ration: g.stock.ration, mat: g.stock.mat, today: g.stock.today, tools: g.stock.tools, toolKnown: [...g.stock.toolKnown], hides: g.stock.hides, cured: g.stock.cured },
+    dead: g.health.dead, legend: g.chatter.legend,
+    cat: { phase: g.cat.phase, name: g.cat.name, signs: g.cat.signs, bold: g.cat.bold, hunting: g.cat.hunting, nights: (g.cat as Any).campNights },
+    wear: b64(Uint8Array.from(g.bodies.wear, v => Math.min(255, v))),
     camp: { list: g.camp.list, queue: g.camp.queue.map(b => b.id), nid: (g.camp as Any).nid },
     jobs: { prio: g.jobs.prio, seen: [...g.jobs.seen], likeKnown: [...g.jobs.likeKnown] },
     requests: { record: [...g.requests.record], wreckDone: g.requests.wreckDone, gripes: g.requests.gripes.map(x => ({ p: x.p.id, text: x.text })) },
@@ -60,7 +63,11 @@ export function load(game: Game): boolean {
   g.story.skillKnown = new Set(s.skillKnown); g.story.secretKnown = new Set(s.secretKnown);
   s.pois.forEach((v: [number, string | null], i: number) => { const q = g.disc.pois[i]; if (q) { q.known = !!v[0]; q.name = v[1]; } });
   unb64(s.explored, g.disc.explored); g.disc.exploredVer++;
-  Object.assign(g.stock, { food: s.stock.food, water: s.stock.water, stolen: s.stock.stolen, ration: s.stock.ration, mat: s.stock.mat, today: s.stock.today });
+  Object.assign(g.stock, { food: { ...g.stock.food, ...s.stock.food }, water: s.stock.water, stolen: s.stock.stolen, ration: s.stock.ration, mat: s.stock.mat, today: s.stock.today });
+  if (s.stock.tools) { g.stock.tools = s.stock.tools; g.stock.toolKnown = new Set(s.stock.toolKnown); g.stock.hides = s.stock.hides; g.stock.cured = s.stock.cured; }
+  if (s.dead) g.health.dead = s.dead; g.chatter.legend = s.legend ?? '';
+  if (s.cat) { Object.assign(g.cat, { phase: s.cat.phase, name: s.cat.name, signs: s.cat.signs, bold: s.cat.bold, hunting: s.cat.hunting }); (g.cat as Any).campNights = s.cat.nights; }
+  if (s.wear) { const u = new Uint8Array(g.bodies.wear.length); unb64(s.wear, u); u.forEach((v, i) => { g.bodies.wear[i] = v; }); }
   g.camp.list = s.camp.list; g.camp.queue = s.camp.queue.map((id: number) => g.camp.list.find(b => b.id === id)).filter(Boolean); (g.camp as Any).nid = s.camp.nid;
   g.jobs.prio = s.jobs.prio; g.jobs.seen = new Set(s.jobs.seen); g.jobs.likeKnown = new Set(s.jobs.likeKnown);
   g.requests.record = new Map(s.requests.record); g.requests.wreckDone = s.requests.wreckDone;
@@ -72,7 +79,7 @@ export function load(game: Game): boolean {
   // people: scouts made it home while you were away; the lost and hurt are still out there
   s.people.forEach((d: Any, i: number) => {
     const p = P[i];
-    Object.assign(p, { x: d.x, z: d.z, face: d.face, hurt: d.hurt, heal: d.heal, hungry: d.hungry, xp: d.xp, pin: d.pin, sleepIn: d.sleepIn, savedBy: d.savedBy, apart: d.apart, hateT: d.hateT });
+    Object.assign(p, { x: d.x, z: d.z, face: d.face, hurt: d.hurt, heal: d.heal, hungry: d.hungry, xp: d.xp, pin: d.pin, sleepIn: d.sleepIn, savedBy: d.savedBy, apart: d.apart, hateT: d.hateT, health: d.health ?? 0, hungerN: d.hungerN ?? 0 });
     p.per.trust = d.trust; p.per.weakness = d.weakness;
     let mode: Mode = d.mode;
     if (mode === 'scout') { mode = 'camp'; const q = g.grid.nearest(g.fire.x + Math.random() * 6 - 3, g.fire.z + Math.random() * 6 - 3); if (q) { p.x = q.x; p.z = q.z; } }

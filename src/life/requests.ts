@@ -153,10 +153,10 @@ export class Requests {
 
   private spawn(L: Person) {
     const g = this.g;
-    const cands = g.people.filter(p => p !== L && !p.hurt && p.pose !== 'sleep' && !this.busy(p) &&
+    const cands = g.people.filter(p => p !== L && !p.hurt && p.health < 2 && p.act !== 'funeral' && p.pose !== 'sleep' && !this.busy(p) &&
       (p.mode === 'follow' || p.mode === 'wait' || (p.mode === 'camp' && Math.hypot(p.x - L.x, p.z - L.z) < 70 && p.act !== 'huddle')));
     if (!cands.length) return;
-    const makers = [...(this.g.era === 'camp' ? [this.suggestBuild, this.suggestBuild] : []), this.pair, this.hoard, this.dispute, this.ration, this.whyThem, this.fish, this.signal, this.wreck, this.rainCatcher, this.lookout, this.sos, this.rescue]
+    const makers = [...(this.g.era === 'camp' ? [this.suggestBuild, this.suggestBuild] : []), this.huntCat, this.pair, this.hoard, this.dispute, this.ration, this.whyThem, this.fish, this.signal, this.wreck, this.rainCatcher, this.lookout, this.sos, this.rescue]
       .sort(() => Math.random() - 0.5);
     for (const p of [...cands].sort(() => Math.random() - 0.5)) for (const mk of makers) {
       const r = mk.call(this, p);
@@ -261,7 +261,7 @@ export class Requests {
     if (this.wreckDone || g.goals.building('wreck')) return null;
     const good = this.chance(p, 0.5, [[has(p.per, 'brave'), 0.6], [p.per.skill === 'mechanic', 0.9], [p.per.weakness === 'clumsy', 0.2]]);
     const run = () => this.idea(p, good, [p], this.spot('wreck'), 'search', 40, () => {
-      this.wreckDone = true; g.stock.add('snacks', 8); g.stock.add('water', 6); g.stock.add('scrap', 6);
+      this.wreckDone = true; g.stock.add('snacks', 8); g.stock.add('water', 6); g.stock.add('scrap', 6); g.stock.tools.knife++; g.stock.toolKnown.add('knife');
       S.toast(`${p.per.name} dug snacks and water bottles out of the wreck!`, 'good', p); S.log(`${p.per.name} crawled through the wreck and came out with snacks and water.`);
     }, () => {
       p.hurt = true; S.say(p, 'Argh! Sharp metal!'); g.startHealing(p);
@@ -318,6 +318,17 @@ export class Requests {
     };
     const t = this.pitch(good, "Let's spell SOS on the beach with rocks. Big enough for a plane to see.");
     return this.req(p, 'idea', t.text, good, [{ label: 'DO IT', cls: 'go', fn: run }, { label: 'LATER', fn: () => this.declined(p, good, 'an SOS sign') }], () => this.ignoreIdea(p, run), t.shy);
+  }
+
+  /** A brave one wants to go after the cat. You lead. */
+  private huntCat(p: Person) {
+    const g = this.g, C = g.cat;
+    if (!C.canHunt() || !(has(p.per, 'brave') || has(p.per, 'hothead'))) return null;
+    const N = C.name || 'that cat';
+    return this.req(p, 'question', `I'm done being scared of ${N}. We have spears. Lead a hunt and I'm with you.`, true, [
+      { label: 'WE HUNT', cls: 'go', fn: () => { C.startHunt(); g.invite(p); g.story.say(p, "Let's go."); } },
+      { label: 'NOT YET', fn: () => { g.story.say(p, `And wait for ${N} to come to us?`); g.story.trust(p, -1); } },
+    ], () => {});
   }
 
   /** Camp era: someone wants something built. Yes puts it in the build queue and they throw themselves into it. */

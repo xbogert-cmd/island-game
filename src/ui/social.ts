@@ -9,6 +9,7 @@ import { load, saveInfo } from '../life/save';
 import { objectives } from '../life/objectives';
 import { JOB, JOB_KINDS, JobKind, LEVEL_WORD, PRIO_WORD, level } from '../life/jobs';
 import { BUILD } from '../life/buildings';
+import { HEALTH_WORD } from '../life/health';
 import { drawIslandMap } from './islandmap';
 import { mapImage } from './hud';
 import { N } from '../world/island';
@@ -112,7 +113,7 @@ const CSS = `
 #today .ob.done { color: #8af07a; }
 `;
 
-const MOOD_TXT: Record<string, string> = { none: '', happy: '😊', angry: '😠', worried: '😟', sad: '😢', scared: '😨', tired: '💤', fond: '❤', pain: '🤕' };
+const MOOD_TXT: Record<string, string> = { sick: '🤢', none: '', happy: '😊', angry: '😠', worried: '😟', sad: '😢', scared: '😨', tired: '💤', fond: '❤', pain: '🤕' };
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Everything on screen about people: leader, party strip, cards, roster, journal, toasts, bubbles, first sightings. */
@@ -232,6 +233,7 @@ export class Social {
       <div class="row"><b>+</b> ${cap(per.strength)} &nbsp; <b>−</b> ${cap(per.weakness)}</div>
       <div class="row"><b>Skill</b> ${skill}${secret ? ` &nbsp; <b>Secret</b> ${secret}` : ''}</div>
       <div class="row"><b>Now</b> ${where} ${MOOD_TXT[p.mood]} ${p.why}${p.ask ? ' · <b>❗ wants to talk</b>' : ''}</div>
+      ${p.health ? `<div class="row"><b>Health</b> ${HEALTH_WORD[p.health]}</div>` : ''}
       ${rec ? `<div class="row"><b>Ideas</b> ${rec.good} worked · ${rec.bad} didn't</div>` : ''}
       <div class="row">${this.workLine(p).replace(/class="k"/g, '').replace('<span >Job</span>', '<b>Job</b>')}</div>
       ${isL ? '' : `<div class="row"><b>Trust in you</b> ${trustWord(per.trust)}</div>`}
@@ -346,7 +348,7 @@ export class Social {
   private fillRoster() {
     if (this.peopleTab === 'jobs') { this.fillJobs(); return; }
     const g = this.game.group, S = g.story;
-    const key = 'r' + g.people.map(p => p.mode + p.mood + p.ask + trustWord(p.per.trust) + S.skillKnown.has(p.id) + S.secretKnown.has(p.id) + JSON.stringify(g.requests.record.get(p.id) ?? '')).join();
+    const key = 'r' + g.people.map(p => p.mode + p.mood + p.ask + p.health + p.job + trustWord(p.per.trust) + S.skillKnown.has(p.id) + S.secretKnown.has(p.id) + JSON.stringify(g.requests.record.get(p.id) ?? '')).join();
     if (key === this.rosterKey) return;
     this.rosterKey = key;
     const esc = (t: string) => t.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
@@ -362,7 +364,7 @@ export class Social {
       const ties = [pair && `Came with ${esc(pair.per.name)}`, fr && fr !== pair && `Friend: ${esc(fr.per.name)}`, rv && `Rival: ${esc(rv.per.name)}`].filter(Boolean).join(' · ');
       const html = `<div style="flex:1">
         <div class="nm">${esc(per.name)} <span>${per.age}${isL ? ' · YOU' : ''}</span> ${p.ask ? '❗' : MOOD_TXT[p.mood]}</div>
-        <div class="dim">${where}${isL ? '' : ` · <span class="k">${trustWord(per.trust)}</span>`}${p.hurt ? ' · hurt' : ''}${p.hungry ? ' · hungry' : ''}</div>
+        <div class="dim">${p.mode === 'dead' ? `† ${esc(g.health.dead.find(d => d.name === per.name)?.cause ?? '')}` : `${where}${isL ? '' : ` · <span class="k">${trustWord(per.trust)}</span>`}${p.hurt ? ' · hurt' : ''}${p.health ? ` · <span class="b">${HEALTH_WORD[p.health]}</span>` : ''}${p.hungry ? ' · hungry' : ''}`}</div>
         <div class="dim">"${esc(per.backstory)}"</div>
         <div>${per.traits.map(cap).join(' · ')}</div>
         <div><span class="g">+ ${cap(per.strength)}</span> &nbsp; <span class="b">− ${cap(per.weakness)}</span></div>
@@ -429,6 +431,8 @@ export class Social {
         html += `<div class="qr" data-q="${b.id}">› ${cap(BUILD[b.kind].label)} — ${stage}${m ? ` <span style="color:#ff8a7a">· waiting for ${m}</span>` : ''}</div>`;
       }
     }
+    const T = st.tools, tw = (n: number) => n <= 0 ? '—' : n === 1 ? 'one' : n < 4 ? 'a few' : 'plenty';
+    if (st.toolKnown.size) html += `<h5>TOOLS</h5><div>${(['axe', 'spear', 'knife', 'basket', 'rope'] as const).filter(t => st.toolKnown.has(t) || T[t] > 0).map(t => `${cap(t)}: ${tw(T[t])}`).join(' · ')}${C.has('workbench') ? '' : ' <span class="dim">(needs a workbench to make more)</span>'}</div>`;
     if (g.era !== 'crash') html += `<h5>MATERIALS</h5><div>Wood: ${word(st.mat.wood)} · Bamboo: ${word(st.mat.bamboo)} · Stone: ${word(st.mat.stone)} · Vines: ${word(st.mat.vines)} · Scrap: ${word(st.mat.scrap)}</div>`;
     const free = g.people.filter(p => p !== g.leader && p.mode === 'camp' && !p.job && !p.hurt);
     html += `<h5>FREE RIGHT NOW</h5><div class="dim">${free.length ? free.map(p => p.per.name).join(', ') : 'Nobody — everyone is busy.'}</div>`;
@@ -480,7 +484,7 @@ export class Social {
     for (const b of g.camp.list) { if (b.kind === 'fence') continue; const sc = this.input.screen(b.x, heightAt(w, b.x, b.z) + 1, b.z), d = Math.hypot(sc.x - this.input.mx, sc.y - this.input.my); if (d < hd) { hd = d; hb = b; } }
     if (hb) {
       const d = BUILD[hb.kind], own = hb.owners.map(i => g.people[i].per.name).join(' & ');
-      const text = hb.progress < 1 ? `${cap(d.label)} — being built` : `${own ? `${own}'s hut` : cap(d.label)} — ${d.desc}${hb.shaky ? ' (shaky)' : ''}`;
+      const text = hb.kind === 'grave' ? `Here lies ${own || 'a friend'}` : hb.progress < 1 ? `${cap(d.label)} — being built` : `${own ? `${own}'s hut` : cap(d.label)} — ${d.desc}${hb.shaky ? ' (shaky)' : ''}`;
       put('hb', 'lbl map', text, hb.x, hb.z, 3.2);
     }
     for (const [k, e] of this.labels) if (!seen.has(k)) e.style.display = 'none';

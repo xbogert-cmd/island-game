@@ -4,7 +4,7 @@ import { Mat, MATS } from './stock';
 import type { Group } from './group';
 
 export type BKind = 'hut' | 'storage' | 'workbench' | 'sickbay' | 'cooking' | 'fishTrap' | 'fence' | 'watchFire'
-  | 'dryingRack' | 'rainCatcher' | 'signalFire' | 'beacon' | 'sos' | 'lookout' | 'bath';
+  | 'dryingRack' | 'rainCatcher' | 'signalFire' | 'beacon' | 'sos' | 'lookout' | 'bath' | 'snares' | 'smokeRack' | 'hideRack' | 'grave';
 
 interface Def { label: string; cost: Partial<Record<Mat, number>>; work: number; desc: string; flat?: boolean; needs?: BKind; many?: boolean }
 
@@ -25,7 +25,11 @@ export const BUILD: Record<BKind, Def> = {
   beacon: { label: 'a beacon', cost: { wood: 10, stone: 4 }, work: 90, desc: 'A towering beacon fire, seen for miles.', needs: 'signalFire' },
   sos: { label: 'SOS on the beach', cost: { stone: 6 }, work: 40, desc: 'Big enough for a plane to see.', flat: true },
   lookout: { label: 'a lookout flag', cost: { wood: 1 }, work: 20, desc: 'Marks the high ground.' },
-  bath: { label: 'a bathing spot', cost: { stone: 4 }, work: 35, desc: 'Somewhere to wash. Lifts moods.', flat: true },
+  bath: { label: 'a bathing spot', cost: { stone: 4 }, work: 35, desc: 'Somewhere to wash. Lifts moods, keeps sickness down.', flat: true },
+  snares: { label: 'snares', cost: { bamboo: 2, vines: 3 }, work: 30, desc: 'Small traps in the jungle. Someone checks them for game.' },
+  smokeRack: { label: 'a smoke rack', cost: { wood: 4, vines: 2 }, work: 35, desc: 'Smoked meat keeps for days.' },
+  hideRack: { label: 'a hide rack', cost: { wood: 3, vines: 2 }, work: 30, desc: 'Cures hides into bedding. Hut owners sleep better.' },
+  grave: { label: 'a grave', cost: {}, work: 1, desc: 'We remember them.', many: true },
 };
 
 export interface Building {
@@ -153,6 +157,10 @@ export class Camp {
     if (!this.has('fishTrap') && this.has('dryingRack')) w.push(['fishTrap', 'A fish trap would catch fish while we sleep.', 'fisher']);
     if (this.has('signalFire') && !this.has('beacon')) w.push(['beacon', 'Make the signal fire a real beacon. Taller.', 'builder']);
     if (!this.has('bath') && g.disc.nearestKnown('water', g.fire)) w.push(['bath', 'A spot to wash. We all smell like the wreck.', 'builder']);
+    const vines = g.disc.pois.some(q => q.known && q.kind === 'material' && q.mat === 'vines');
+    if (!this.has('snares') && vines) w.push(['snares', 'Snares in the jungle. Meat without chasing it.', 'none']);
+    if (!this.has('smokeRack') && (g.stock.tools.spear > 0 || g.stock.food.meat > 0)) w.push(['smokeRack', "Meat rots in a day. A smoke rack would keep it.", 'cook']);
+    if (!this.has('hideRack') && g.stock.hides > 0) w.push(['hideRack', 'We have hides. Stretch them on a rack and we can sleep on them.', 'none']);
     return w.filter(x => !this.planned(x[0]) || x[0] === 'hut');
   }
 
@@ -209,6 +217,9 @@ export class Camp {
       case 'signalFire': return g.shore(18, [g.fishSpot]);
       case 'beacon': { const s = this.get('signalFire'); return s ? { x: s.x, z: s.z } : g.shore(18, [g.fishSpot]); }
       case 'sos': return g.shore(22, [g.fishSpot, this.get('signalFire') ?? g.fishSpot]);
+      case 'snares': { const j = g.disc.pois.filter(q => q.known && q.kind === 'material' && q.mat === 'vines')[0]; return j ? (g.grid.nearest(j.x + 4, j.z - 3) ?? j) : this.ring(F.x, F.z, 24, 34, 1.0, land); }
+      case 'smokeRack': case 'hideRack': return this.ring(P.x, P.z, 4, 9, 1.0, land);
+      case 'grave': return this.ring(F.x, F.z, 21, 27, 0.8, land + 2.2 + this.count('grave') * 0.25);
       case 'bath': { const wtr = g.disc.nearestKnown('water', F); return wtr && Math.hypot(wtr.x - F.x, wtr.z - F.z) < 90 ? (g.grid.nearest(wtr.x + 2, wtr.z + 2) ?? wtr) : this.ring(F.x, F.z, 12, 20, 1.2, land); }
       case 'lookout': return g.requests.spot('lookout');
     }

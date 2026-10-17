@@ -1,12 +1,12 @@
 import { mulberry32 } from '../world/noise';
 import { has, Skill } from './persona';
 import { Person, Pose, Pt } from './people';
-import { Mat } from './stock';
+import { Mat, MATS, TOOLS, TOOL_COST, Tool } from './stock';
 import { Building } from './buildings';
 import type { Group } from './group';
 
-export type JobKind = 'water' | 'food' | 'fish' | 'wood' | 'bamboo' | 'stone' | 'vines' | 'scrap' | 'build' | 'cook' | 'watch' | 'tend';
-export const JOB_KINDS: JobKind[] = ['water', 'food', 'fish', 'wood', 'bamboo', 'stone', 'vines', 'scrap', 'build', 'cook', 'watch', 'tend'];
+export type JobKind = 'water' | 'food' | 'fish' | 'hunt' | 'trap' | 'wood' | 'bamboo' | 'stone' | 'vines' | 'scrap' | 'build' | 'craft' | 'cook' | 'watch' | 'tend';
+export const JOB_KINDS: JobKind[] = ['water', 'food', 'fish', 'hunt', 'trap', 'wood', 'bamboo', 'stone', 'vines', 'scrap', 'build', 'craft', 'cook', 'watch', 'tend'];
 type Shift = 'day' | 'evening' | 'night';
 interface JobDef { label: string; verb: string; shift: Shift; skill?: Skill; pose: Pose; outdoor: boolean }
 
@@ -20,6 +20,9 @@ export const JOB: Record<JobKind, JobDef> = {
   vines: { label: 'Vines', verb: 'pulling vines', shift: 'day', pose: 'collect', outdoor: true },
   scrap: { label: 'Scrap', verb: 'stripping the wreck', shift: 'day', skill: 'mechanic', pose: 'search', outdoor: true },
   build: { label: 'Building', verb: 'building', shift: 'day', skill: 'builder', pose: 'build', outdoor: true },
+  craft: { label: 'Making tools', verb: 'making tools', shift: 'day', skill: 'mechanic', pose: 'build', outdoor: false },
+  hunt: { label: 'Hunting', verb: 'hunting', shift: 'day', pose: 'search', outdoor: true },
+  trap: { label: 'Checking snares', verb: 'checking the snares', shift: 'day', pose: 'collect', outdoor: true },
   cook: { label: 'Cooking', verb: 'cooking', shift: 'evening', skill: 'cook', pose: 'build', outdoor: false },
   watch: { label: 'Night watch', verb: 'on night watch', shift: 'night', pose: 'idle', outdoor: false },
   tend: { label: 'Tending the sick', verb: 'tending the sick', shift: 'day', skill: 'medic', pose: 'collect', outdoor: false },
@@ -29,6 +32,7 @@ export const PRIO_WORD = ['LOW', 'NORMAL', 'HIGH'];
 export const LEVEL_WORD = ['Novice', 'Handy', 'Skilled', 'Expert'];
 export const level = (xp: number) => xp < 6 ? 0 : xp < 18 ? 1 : xp < 40 ? 2 : 3;
 const pickOf = <T,>(a: T[]) => a[(Math.random() * a.length) | 0];
+const TOOL_LINE: Record<Tool, string> = { knife: 'Stripping the wreck just got easier.', axe: 'Wood comes in twice as fast now.', spear: 'Now we can hunt.', basket: 'Gatherers carry more.', rope: 'Building goes quicker with proper rope.' };
 
 /**
  * Who does what. Fully automatic: the camp staffs each job from what is needed.
@@ -42,6 +46,7 @@ export class Jobs {
   cooked = false;                 // someone cooked tonight
   likeKnown = new Set<string>();  // `${id}:love` / `${id}:hate`
   private t = 0;
+  snareCheck = -1e9;
 
   constructor(private g: Group) {
     const rnd = mulberry32(g.w.seed ^ 0x10b5);
@@ -67,6 +72,10 @@ export class Jobs {
     if (C.has('cooking')) out.push('cook');
     if (C.has('watchFire')) out.push('watch');
     if (C.has('sickbay')) out.push('tend');
+    const st = g.stock;
+    if (C.has('workbench') && TOOLS.some(t => st.toolKnown.has(t))) out.push('craft');
+    if (st.tools.spear > 0) out.push('hunt');
+    if (C.has('snares')) out.push('trap');
     for (const k of out) if (!this.seen.has(k)) { this.seen.add(k); if (this.seen.size > 2) { this.fresh = true; g.story.toast(`New job: ${JOB[k].label}.`, 'info'); } }
     return out;
   }
@@ -88,6 +97,10 @@ export class Jobs {
     if (mates.some(o => this.g.story.rel(p, o) > 30)) s *= 1.12;
     if (mates.some(o => this.g.story.rel(p, o) < -30)) s *= 0.8;
     if (JOB[k].outdoor && this.g.weather.rain > 0.3) s *= 0.7;
+    const T = this.g.stock.tools;
+    if ((k === 'wood' || k === 'bamboo') && T.axe > 0) s *= 1.6;          // an axe makes all the difference
+    if (k === 'scrap' && T.knife > 0) s *= 1.4;
+    if (k === 'build' && T.rope > 0) s *= 1.25;
     return s;
   }
 
@@ -103,7 +116,10 @@ export class Jobs {
       case 'build': return C.target() ? Math.min(3, 1 + C.queue.length) : 0;
       case 'cook': return 1;
       case 'watch': return 1;
-      case 'tend': return g.people.some(p => p.hurt && p.mode === 'camp') ? 1 : 0;
+      case 'tend': return g.people.some(p => (p.hurt || p.health >= 2) && p.mode === 'camp') ? 1 : 0;
+      case 'craft': return this.nextTool() ? 1 : 0;
+      case 'hunt': return Math.min(st.tools.spear, st.totalFood < n * 1.5 ? 3 : st.totalFood < n * 3 ? 2 : 0);
+      case 'trap': return 1;
       default: { const need = C.need()[k as Mat]; return need > 0 ? Math.min(4, Math.ceil(need / 2)) : st.mat[k as Mat] < 3 && C.queue.length ? 1 : 0; }
     }
   }
@@ -112,7 +128,10 @@ export class Jobs {
   update(dt: number) {
     if ((this.t -= dt) > 0) return;
     this.t = 5;
-    const g = this.g, S = g.story, vis = this.visible(), plan = g.goals.cur && g.goals.active(g.goals.cur.kind) ? g.goals.cur : null;
+    const g = this.g, S = g.story;
+    // anyone can twist vines into rope or weave a basket once there are vines
+    if (g.disc.pois.some(q => q.known && q.kind === 'material' && q.mat === 'vines')) { g.stock.toolKnown.add('basket'); g.stock.toolKnown.add('rope'); }
+    const vis = this.visible(), plan = g.goals.cur && g.goals.active(g.goals.cur.kind) ? g.goals.cur : null;
     for (const k of JOB_KINDS) {
       let w = vis.includes(k) ? this.demand(k) : 0;
       if (vis.includes(k) && plan && ((plan.kind === 'food' && (k === 'food' || k === 'fish')) || (plan.kind === 'water' && k === 'water') || (plan.kind === 'build' && ((k === 'build' && g.camp.target()) || g.camp.need()[k as Mat] > 0)))) w += 2;
@@ -147,7 +166,7 @@ export class Jobs {
 
   available(p: Person) {
     const g = this.g;
-    return p !== g.leader && p.mode === 'camp' && !p.hurt && p.act !== 'ask' && p.act !== 'job' && p.act !== 'huddle' && !p.sleepIn && !g.requests.busy(p);
+    return p !== g.leader && p.mode === 'camp' && !p.hurt && p.health < 2 && p.act !== 'ask' && p.act !== 'job' && p.act !== 'huddle' && p.act !== 'funeral' && !p.sleepIn && !g.requests.busy(p);
   }
 
   private score(p: Person, k: JobKind, crew: Person[]) {
@@ -172,6 +191,14 @@ export class Jobs {
   /** NORMAL → HIGH → LOW → NORMAL */
   cyclePrio(k: JobKind) { this.prio[k] = [1, 2, 0][this.prio[k]]; this.t = 0; }
 
+  /** The tool the camp needs most right now (and knows how to make). */
+  nextTool(): Tool | null {
+    const g = this.g, st = g.stock, T = st.tools, n = (k: string) => g.people.filter(p => p.job === k).length;
+    const want: [Tool, number][] = [['axe', Math.max(1, Math.min(2, n('wood') + n('bamboo')))], ['spear', 3], ['basket', 2], ['knife', 1], ['rope', 2]];
+    for (const [t, c] of want) if (st.toolKnown.has(t) && T[t] < c && MATS.every(m => (TOOL_COST[t][m] ?? 0) <= st.mat[m])) return t;
+    return null;
+  }
+
   // ------------------------------------------------------------------ doing the work
 
   private source(k: JobKind, p: Person): Pt | null {
@@ -192,6 +219,7 @@ export class Jobs {
     const walk = () => { if (!p.path.length) return false; B_.advance(p, B_.speed(p) * (p.carry ? 0.9 : 1), dt); p.pose = p.hurt ? 'limp' : 'walk'; return true; };
     const goTo = (x: number, z: number) => { p.ax = x; p.az = z; if (!B_.go(p, x, z)) p.path = []; };
     p.torch = g.clock.night > 0.5 && k !== 'watch' && k !== 'cook';
+    if (p.job !== 'craft' && TOOLS.includes(p.bring as Tool)) p.bring = '';
     switch (k) {
       case 'build': {
         const b = g.camp.target();
@@ -226,6 +254,60 @@ export class Jobs {
         this.gainXp(p, k, dt / 40);
         return;
       }
+      case 'craft': {
+        const wb = g.camp.get('workbench'); if (!wb) return;
+        if (p.wph !== 'k') { p.wph = 'k'; p.wT = 0; goTo(wb.x + 1.4, wb.z + 0.6); return; }
+        if (walk()) return;
+        B_.faceToward(p, wb.x, wb.z);
+        const t = this.nextTool(); if (!t && p.wT <= 0) { p.pose = 'idle'; return; }
+        if (p.wT <= 0) { if (!t || !g.stock.pay(TOOL_COST[t])) { p.pose = 'idle'; return; } p.wT = 0.01; p.bring = t; }
+        p.pose = 'build'; p.wT += dt * this.speed(p);
+        if (p.wT >= 25) {
+          const made = p.bring as Tool; p.wT = 0; p.bring = '';
+          g.stock.tools[made]++; this.gainXp(p, k, 2);
+          if (g.stock.tools[made] === 1) { g.story.toast(`${p.per.name} made the camp's first ${made}.`, 'good', p); g.story.log(`${p.per.name} made our first ${made}. ${TOOL_LINE[made]}`); g.onSting(true); }
+        }
+        return;
+      }
+      case 'hunt': {
+        // into the jungle, track, chase, and (maybe) home with meat
+        if (p.wph === '' || p.wph.startsWith('site')) {
+          const F2 = g.fire; let s: Pt | null = null;
+          for (let i = 0; i < 12 && !s; i++) { const a = Math.random() * 6.283, r = 40 + Math.random() * 50, x = F2.x + Math.cos(a) * r, z = F2.z + Math.sin(a) * r; if (g.grid.walkable(x, z)) s = { x, z }; }
+          if (!s) return; p.wph = 'go'; goTo(s.x, s.z); return;
+        }
+        if (walk()) return;
+        if (p.wph === 'go') { p.wph = 'track'; p.wT = 6 + Math.random() * 4; }
+        if (p.wph === 'track') { p.pose = (p.wT % 3) < 1.5 ? 'search' : 'point'; if ((p.wT -= dt * this.speed(p)) > 0) return; p.wph = 'chase'; p.wT = 3; }
+        if (p.wph === 'chase') {
+          p.pose = 'run'; p.moving = true; p.face = Math.sin(p.anim * 2) > 0 ? 1 : -1;
+          if ((p.wT -= dt) > 0) return;
+          const odds = 0.4 + level(p.xp.hunt ?? 0) * 0.1 + (has(p.per, 'brave') ? 0.1 : 0) - (has(p.per, 'cowardly') ? 0.15 : 0);
+          if (Math.random() < odds) { p.carry = 3; p.bring = 'meat'; p.poseO = 'cheer'; p.poseT = 1.2; if (Math.random() < 0.5) g.stock.hides++; }
+          else if (Math.random() < 0.08) { p.hurt = true; p.heal = 300; g.story.say(p, 'The boar got me!'); g.story.toast(`${p.per.name} was gored by a boar.`, 'bad', p); this.quit(p); return; }
+          else g.story.say(p, pickOf(['Got away...', 'Too fast.', 'Next time.']), 2);
+          p.wph = p.carry ? 'back' : ''; if (p.carry) { const P = g.stock.pile; goTo(P.x + 1, P.z + 1); }
+          return;
+        }
+        if (p.wph === 'back') { g.deposit(p); p.carry = 0; p.wph = ''; this.gainXp(p, k, 1); }
+        return;
+      }
+      case 'trap': {
+        const sn = g.camp.get('snares'); if (!sn) return;
+        if (p.wph === '' || p.wph.startsWith('site')) { p.wph = 'go'; goTo(sn.x, sn.z); return; }
+        if (walk()) return;
+        if (p.wph === 'go') { p.wph = 'work'; p.wT = 3; }
+        if (p.wph === 'work') {
+          p.pose = 'collect'; if ((p.wT -= dt) > 0) return;
+          const ready = g.clock.minutes - this.snareCheck > 240;
+          if (ready) { this.snareCheck = g.clock.minutes; p.carry = 2; p.bring = 'meat'; p.wph = 'back'; const P = g.stock.pile; goTo(P.x, P.z + 1); }
+          else { p.wph = 'wait'; p.wT = 30; }
+          return;
+        }
+        if (p.wph === 'wait') { p.pose = 'idle'; if ((p.wT -= dt) <= 0) p.wph = 'go'; return; }
+        if (p.wph === 'back') { g.deposit(p); p.carry = 0; p.wph = ''; this.gainXp(p, k, 1); }
+        return;
+      }
       case 'tend': {
         const sb = g.camp.get('sickbay'); if (!sb) return;
         if (p.wph !== 't') { p.wph = 't'; goTo(sb.x + 1.5, sb.z + 1); return; }
@@ -255,6 +337,7 @@ export class Jobs {
     if (p.wph === 'back') {
       g.deposit(p); p.carry = 0; p.wph = '';
       this.gainXp(p, k, 1);
+      g.chatter.notice(p);
       if (p.love === k && !this.likeKnown.has(p.id + ':love') && (p.xp[k] ?? 0) > 8) { this.likeKnown.add(p.id + ':love'); g.story.say(p, pickOf([`I could do ${JOB[k].verb} all day.`, `I love ${JOB[k].verb}.`])); g.story.mood(p, 'happy', 15); }
     }
   }

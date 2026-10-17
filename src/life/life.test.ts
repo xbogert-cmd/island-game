@@ -7,6 +7,7 @@ import { Stock } from './stock';
 import { Jobs, level } from './jobs';
 import { BUILD, BKind, stageCost } from './buildings';
 import type { Person } from './people';
+import { Health } from './health';
 
 function flatWorld(): World {
   const h = new Float32Array(N * N).fill(2), biome = new Uint8Array(N * N).fill(B.Grass);
@@ -120,5 +121,21 @@ describe('jobs', () => {
       const st = stageCost(k), c = BUILD[k].cost;
       for (const m of Object.keys(c) as (keyof typeof c)[]) expect(st[m]! * 3).toBeGreaterThanOrEqual(c[m]!);
     }
+  });
+});
+
+describe('health', () => {
+  it('never skips the warning stages: one step per dawn, death only from very sick', () => {
+    const noop = () => {};
+    const p = { id: 0, per: { name: 'Test', skill: 'none', traits: [] }, mode: 'camp', health: 0, hungerN: 0, hungry: true, hurt: false, x: 0, z: 0 } as unknown as Person;
+    const g = { people: [p], camp: { has: () => false, get: () => null }, stats: { spoiled: 0 }, goals: { active: () => false },
+      story: { toast: noop, log: noop, say: noop, mood: noop, trustAll: noop, rel: () => 0 }, onAlarm: noop, hint: noop, onSting: noop };
+    const H = new Health(g as unknown as ConstructorParameters<typeof Health>[0]);
+    const seen: number[] = [];
+    let diedAt = -1;
+    H.die = (q: Person) => { diedAt = q.health; q.mode = 'dead'; };
+    for (let d = 0; d < 40 && p.mode !== 'dead'; d++) { const before = p.health; H.dawn(); seen.push(p.health); expect(p.health - before).toBeLessThanOrEqual(1); }
+    expect(seen).toContain(1); expect(seen).toContain(2); expect(seen).toContain(3);
+    if (diedAt >= 0) expect(diedAt).toBe(3);
   });
 });

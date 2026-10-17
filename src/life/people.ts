@@ -11,7 +11,7 @@ const shade = (h: string, f: number) => { const c = [1, 3, 5].map(i => parseInt(
 
 export type Pose = 'idle' | 'walk' | 'run' | 'limp' | 'sit' | 'sleep' | 'cover' | 'search' | 'collect' | 'point' | 'wave' | 'whistle' | 'cheer' | 'argue' | 'slump' | 'startle' | 'fish' | 'eat' | 'build';
 export type Mode = 'asleep' | 'camp' | 'leader' | 'follow' | 'wait' | 'scout' | 'lost' | 'hurt' | 'rescued' | 'dead';
-export type Mood = 'none' | 'happy' | 'angry' | 'worried' | 'sad' | 'scared' | 'tired' | 'fond' | 'pain';
+export type Mood = 'none' | 'happy' | 'angry' | 'worried' | 'sad' | 'scared' | 'tired' | 'fond' | 'pain' | 'sick';
 export interface Pt { x: number; z: number }
 
 export interface Person {
@@ -37,10 +37,12 @@ export interface Person {
   sleepIn: boolean; watched: boolean;
   /** who rescued them (-1 = nobody) */
   savedBy: number;
+  /** 0 healthy, 1 weak, 2 sick, 3 very sick */
+  health: number; hungerN: number;
   step: number;
 }
 
-const MOOD_ICON: Record<Mood, string> = { none: '', happy: 'mHappy', angry: 'mAngry', worried: 'mWorry', sad: 'mSad', scared: 'mScared', tired: 'mSleep', fond: 'mFond', pain: 'mPain' };
+const MOOD_ICON: Record<Mood, string> = { none: '', happy: 'mHappy', angry: 'mAngry', worried: 'mWorry', sad: 'mSad', scared: 'mScared', tired: 'mSleep', fond: 'mFond', pain: 'mPain', sick: 'mSick' };
 const FRAME_RATE: Partial<Record<Pose, number>> = { walk: 9, run: 13, limp: 6, wave: 4, argue: 5, cheer: 5, collect: 3, search: 1.5, startle: 0, fish: 0.5, eat: 2, build: 4 };
 
 type Arm = 'down' | 'fwd' | 'up' | 'out' | 'mouth' | 'torch' | 'bucket' | 'carry' | 'log' | 'reach' | 'fist' | 'rod' | 'hamUp' | 'hamDown' | 'food';
@@ -133,6 +135,8 @@ export class Survivors {
   private g: CanvasRenderingContext2D;
   private tex: THREE.CanvasTexture;
   readonly yUp = PX / Math.cos(PITCH);       // world-y per screen pixel, for things drawn above a sprite
+  /** footfall per 4×4 cell: busy routes wear into paths */
+  wear = new Float32Array(192 * 192);
 
   constructor(private w: World, private grid: WalkGrid, pers: Persona[], private fx: Particles) {
     const n = pers.length;
@@ -151,14 +155,14 @@ export class Survivors {
         id: i, per, x, z, face: side, pose: 'sleep', anim: Math.random() * 9, key: '', mode: 'asleep',
         path: [], repath: 0, stuck: 0, moving: false, act: '', actT: Math.random() * 3, ax: x, az: z, partner: null,
         poseO: null, poseT: 0, torch: false, carry: 0, hurt: false, heal: 0, mood: 'none', tmood: 'none', moodT: 0, why: '', apart: 0, apartHit: false, step: 0, ask: false, bring: '', hungry: false,
-        job: '', wph: '', wT: 0, xp: {}, love: '', hate: '', pin: '', hateT: 0, sleepIn: false, watched: false, savedBy: -1,
+        job: '', wph: '', wT: 0, xp: {}, love: '', hate: '', pin: '', hateT: 0, sleepIn: false, watched: false, savedBy: -1, health: 0, hungerN: 0,
       });
     }
   }
 
   speed(p: Person) {
     const s = p.per.strength, k = p.per.weakness;
-    return 2.3 * (s === 'fast walker' ? 1.2 : 1) * (k === 'bad knee' ? 0.85 : 1) * (p.per.age === 'elder' ? 0.88 : 1) * (p.hurt ? 0.5 : 1);
+    return 2.3 * (s === 'fast walker' ? 1.2 : 1) * (k === 'bad knee' ? 0.85 : 1) * (p.per.age === 'elder' ? 0.88 : 1) * (p.hurt ? 0.5 : 1) * (p.health >= 1 ? 0.8 : 1);
   }
 
   /** Plan a path to (x,z). */
@@ -188,6 +192,7 @@ export class Survivors {
     // footprints in sand and mud
     if ((p.step += s) > 0.55) {
       p.step = 0;
+      const ci = Math.floor(p.z / 4) * 192 + Math.floor(p.x / 4); if (ci >= 0 && ci < this.wear.length && this.wear[ci] < 200) this.wear[ci] += 0.25;
       const b = biomeAt(this.w, p.x, p.z);
       if (b === B.Beach || b === B.Swamp || b === B.Dirt) {
         const side = (Math.floor(p.anim * 4) % 2 ? 0.12 : -0.12);
@@ -206,6 +211,7 @@ export class Survivors {
     this.batch.begin();
     const torches: Person[] = [];
     for (const p of this.people) {
+      if (p.mode === 'dead') continue;
       const fr = Math.floor(p.anim * (FRAME_RATE[p.pose] ?? 0)) % 4, key = `${p.pose}${p.face}${fr}${p.torch ? 1 : 0}${p.carry}`;
       if (key !== p.key) {
         p.key = key; dirty = true;

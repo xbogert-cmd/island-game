@@ -7,7 +7,7 @@ import type { Group } from './group';
 
 const pickOf = <T,>(a: T[]) => a[(Math.random() * a.length) | 0];
 
-export type GoalKind = 'explore' | 'food' | 'water' | 'rest' | 'build' | 'salvage' | 'mend' | 'search';
+export type GoalKind = 'explore' | 'food' | 'water' | 'rest' | 'build' | 'salvage' | 'mend' | 'search' | 'hunt';
 export interface GoalOpt { kind: GoalKind; who: Person; title: string; line: string; x?: number; z?: number; prop?: BKind; a?: Person; b?: Person }
 
 /** The group's plan for the day: three people pitch at dawn, you pick one (or the most trusted wins). */
@@ -68,7 +68,7 @@ export class Goals {
 
   private offer(): boolean {
     const g = this.g, S = g.story, L = g.leader!, R = g.requests;
-    const pool = g.people.filter(p => p !== L && !p.hurt && (p.mode === 'camp' || p.mode === 'follow' || p.mode === 'wait'));
+    const pool = g.people.filter(p => p !== L && !p.hurt && p.health < 2 && (p.mode === 'camp' || p.mode === 'follow' || p.mode === 'wait'));
     if (pool.length < 3) return false;
     const used = new Set<Person>();
     const pitcher = (likes: Trait[], skill?: string, not: Person[] = []) => {
@@ -100,6 +100,7 @@ export class Goals {
     const ra = pool.find(a => pool.some(b => b !== a && S.rel(a, b) < -30));
     const rb = ra && pool.find(b => b !== ra && S.rel(ra, b) < -30);
     if (ra && rb) rest.push(() => { const w = pitcher(['calm', 'kind'], undefined, [ra, rb]); return w && { kind: 'mend', who: w, a: ra, b: rb, title: 'CLEAR THE AIR', line: `${ra.per.name} and ${rb.per.name} need to sort things out before someone gets hurt.` }; });
+    if (g.cat.canHunt()) cands.push(() => { const w = pitcher(['brave', 'hothead']); return w && { kind: 'hunt', who: w, title: `HUNT ${g.cat.name.toUpperCase() || 'THE CAT'}`, line: `We have spears now. Let's end this. You lead, we follow.` }; });
     rest.sort(() => Math.random() - 0.5);
     const out: GoalOpt[] = [];
     for (const c of [...cands, ...rest]) {
@@ -143,7 +144,7 @@ export class Goals {
       case 'salvage': {
         const c = crew(3), good = Math.random() < 0.85;
         R.job(c, R.spot('wreck'), 'search', 50, () => {
-          if (good) { R.wreckDone = true; g.stock.add('snacks', 8); g.stock.add('water', 6); g.stock.add('scrap', 8); S.toast('We stripped the wreck: snacks, water bottles, a knife.', 'good'); S.log('We took the wreck apart and found snacks and bottled water.'); g.onSting(true); }
+          if (good) { R.wreckDone = true; g.stock.add('snacks', 8); g.stock.add('water', 6); g.stock.add('scrap', 8); g.stock.tools.knife++; g.stock.toolKnown.add('knife'); S.toast('We stripped the wreck: snacks, water bottles, a knife.', 'good'); S.log('We took the wreck apart and found snacks and bottled water.'); g.onSting(true); }
           else { const p = pickOf(c); p.hurt = true; g.startHealing(p); S.toast(`${p.per.name} got cut on the wreck. We found nothing.`, 'bad', p); g.onSting(false); }
         });
         break;
@@ -153,6 +154,7 @@ export class Goals {
         if (a.mode === 'camp' && b.mode === 'camp') { a.act = 'talk'; a.partner = b; a.actT = 25; b.act = 'listen'; b.partner = a; b.actT = 25; b.path = []; g.bodies.go(a, b.x + 1.2, b.z); }
         break;
       }
+      case 'hunt': g.cat.startHunt(); S.say(o.who, 'Spears, everyone. Stay together.'); break;
       case 'search': for (const p of g.people) if (p.mode === 'camp' && Math.random() < 0.4) S.say(p, 'Hang on. We\'re coming.'); break;
     }
   }
@@ -169,6 +171,7 @@ export class Goals {
       case 'build': { const b = this.planned, pr = b ? b.progress : 0; met = pr >= 0.5; const L = PROP_TEXT[o.prop!]; text = pr >= 1 ? `${L.charAt(0).toUpperCase() + L.slice(1)} is standing.` : met ? `${L.charAt(0).toUpperCase() + L.slice(1)} is coming along.` : b && g.camp.waitingFor(b) ? `We ran out of ${g.camp.waitingFor(b)} for ${L}.` : `Barely started on ${L}.`; break; }
       case 'salvage': met = g.requests.wreckDone; text = met ? 'The wreck gave us what it had.' : 'The wreck gave us nothing.'; break;
       case 'mend': { const a = o.a!, b = o.b!; S.addRel(a, b, 15); S.say(a, `Okay, ${b.per.name}. We're good.`); text = `${a.per.name} and ${b.per.name} made peace. For now.`; break; }
+      case 'hunt': met = g.cat.phase === 'dead'; text = met ? `${g.cat.name || 'The cat'} is dead.` : `${g.cat.name || 'The cat'} is still out there.`; break;
       case 'search': met = !(o.a!.mode === 'lost' || o.a!.mode === 'hurt'); text = met ? `${o.a!.per.name} is safe.` : `${o.a!.per.name} is still out there.`; break;
     }
     S.toast(`Today's plan: ${text}`, met ? 'good' : 'bad', o.who);

@@ -194,7 +194,9 @@ export class Game {
       const y = Math.max(heightAt(w, m.x, m.z), U.uTide.value) + 2.5 + Math.sin(tt * 2.5) * 0.25;
       b.push(m.x, y, m.z, ATLAS[red ? 'xMark' : 'qMark'][0], false, 1, 1, 1, 2);
     }
+    this.drawPaths(t);
     this.drawCamp(near);
+    this.drawCat(near);
     for (const tr of g.scouting.trips) for (let i = 0; i < tr.trail.length; i += 1) {
       const q = tr.trail[i]; if (!near(q.x, q.z)) continue;
       b.push(q.x, heightAt(w, q.x, q.z) + 0.06, q.z, ATLAS.dot2[0], false, 1, 0.95, 0.75, 2, true);
@@ -261,6 +263,37 @@ export class Game {
       }
       if (lit && (bd.kind === 'signalFire' || bd.kind === 'watchFire')) flames(bd.x, gy + (bd.kind === 'watchFire' ? 16 : 3) * yUp, bd.z, 3, 2.5);
       if (lit && bd.kind === 'beacon') flames(bd.x, gy + 29 * yUp, bd.z, 5, 2.5);
+    }
+  }
+
+  /** Worn paths: dirt where people walk every day. */
+  private drawPaths(t: THREE.Vector3) {
+    const wear = this.group.bodies.wear, b = this.batch, w = this.world, R = this.viewR * 1.2;
+    const x0 = Math.max(0, Math.floor((t.x - R) / 4)), x1 = Math.min(191, Math.floor((t.x + R) / 4)), z0 = Math.max(0, Math.floor((t.z - R * 1.2) / 4)), z1 = Math.min(191, Math.floor((t.z + R * 1.2) / 4));
+    for (let j = z0; j <= z1; j++) for (let i = x0; i <= x1; i++) {
+      const v = wear[j * 192 + i]; if (v < 12) continue;
+      const x = i * 4 + 2, z = j * 4 + 2;
+      b.push(x, heightAt(w, x, z) + 0.03, z, ATLAS.pathTile[0], false, 0.8, 0.68, 0.5, Math.min(0.85, (v - 12) / 30), true);
+    }
+  }
+
+  /** The cat, its eyes in the dark, its tracks. Flags on huts, the trophy, graves. */
+  private drawCat(near: (x: number, z: number) => boolean) {
+    const g = this.group, C = g.cat, b = this.batch, w = this.world, tt = U.uTime.value, yUp = g.bodies.yUp, rr = U.uCamRight.value;
+    C.paws.forEach((p, i) => { if (near(p.x, p.z)) b.push(p.x + (i % 2 ? 0.3 : -0.3), heightAt(w, p.x, p.z) + 0.03, p.z, ATLAS.paw[0], false, 1, 1, 1, Math.min(1, p.t / 60), true); });
+    if ((C.visible || C.eyes) && near(C.x, C.z)) {
+      const gy = heightAt(w, C.x, C.z);
+      if (C.visible) b.push(C.x, gy - 0.05, C.z, ATLAS.cat[C.moving ? Math.floor(tt * 8) % 2 : 0], C.face < 0);
+      if (C.eyes && this.clock.night > 0.4 && Math.sin(tt * 1.3) > -0.85) b.push(C.x + rr.x * C.face * 6 * PX, gy + 6 * yUp, C.z + rr.z * C.face * 6 * PX, ATLAS.eyes[0], false, 1, 1, 0.6, 2);
+    }
+    for (const h of g.camp.list) {
+      if (h.kind !== 'hut' || h.progress < 1 || !h.owners.length || !near(h.x, h.z)) continue;
+      const o = g.people[h.owners[0]], c = o.per.look.shirt, gy = heightAt(w, h.x, h.z);
+      b.push(h.x + rr.x * 1.5 * PX, gy + 27 * yUp, h.z + rr.z * 1.5 * PX, ATLAS.flag[Math.floor(tt * 2 + h.id) % 2], false, parseInt(c.slice(1, 3), 16) / 255, parseInt(c.slice(3, 5), 16) / 255, parseInt(c.slice(5, 7), 16) / 255, 1);
+    }
+    if (C.phase === 'dead' && g.leader) {
+      const h = g.camp.hutOf(g.leader.id), at = h ? { x: h.x + rr.x * 2.6, z: h.z + rr.z * 2.6 } : { x: g.fire.x + 4, z: g.fire.z - 4 };
+      if (near(at.x, at.z)) b.push(at.x, heightAt(w, at.x, at.z) - 0.05, at.z, ATLAS.catHide[0]);
     }
   }
 

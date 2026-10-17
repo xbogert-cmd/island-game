@@ -13,6 +13,8 @@ export function objectives(g: Group): Objective[] {
   const n = g.people.length;
   // someone in trouble beats everything
   for (const m of d.markers) if (m.kind === '!' && m.who) out.push({ key: 'rescue' + m.who.id, text: `Find ${m.who.per.name} (red !)`, x: m.x, z: m.z });
+  for (const p of g.people) if (p.mode !== 'dead' && p.health >= 2) out.push({ key: 'sick' + p.id, text: p.health >= 3 ? `${p.per.name} is very sick: sick bay, food and water now` : `${p.per.name} is sick: keep them fed and resting`, x: p.x, z: p.z });
+  if (g.cat.hunting) out.push({ key: 'hunt', text: `Hunt ${g.cat.name || 'the cat'}: take a party to its lair (red ring)`, x: g.cat.lair.x, z: g.cat.lair.z });
   const r = g.requests.cur;
   if (r) out.push({ key: 'ask', text: `${r.p.per.name} wants to talk (❗)`, x: r.p.x, z: r.p.z });
   if (g.goals.opts.length) out.push({ key: 'plan', text: 'Pick a plan for today' });
