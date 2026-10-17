@@ -55,7 +55,7 @@ export class Hud {
     const gear = el('<button id="gear" class="hud btn">⚙ SETTINGS</button>');
     const panel = el(`<div id="panel" class="hud">
       <label>Pixel filter <input id="o-filter" type="checkbox"></label>
-      <label>Texture grain <select id="o-grain"><option value="0">Smooth</option><option value="0.3">Soft</option><option value="1">Gritty</option></select></label>
+      <label>Texture grain <select id="o-grain"><option value="0">Smooth</option><option value="0.35">Soft</option><option value="0.65">Medium</option><option value="1">Gritty</option></select></label>
       <label>Sound <input id="o-sound" type="checkbox" checked></label>
       <label>Weather <select id="o-wx"><option value="auto">Auto</option><option>clear</option><option>cloudy</option><option>rain</option><option>storm</option></select></label>
       <label>Seed <input id="o-seed" type="text" value="${game.world.seed}"></label>
@@ -68,8 +68,8 @@ export class Hud {
     const applyFilter = () => { game.post.mat.uniforms.uFilter.value = filt.checked ? 1 : 0; localStorageSet('pixelFilter', filt.checked ? '1' : '0'); };
     filt.addEventListener('change', applyFilter); applyFilter();
     const grain = panel.querySelector('#o-grain') as HTMLSelectElement;
-    grain.value = localStorageGet('grain') ?? '0.3';
-    const applyGrain = () => { U.uGrain.value = Number(grain.value); localStorageSet('grain', grain.value); };
+    grain.value = localStorageGet('grain2') ?? '0.65';
+    const applyGrain = () => { U.uGrain.value = Number(grain.value); localStorageSet('grain2', grain.value); };
     grain.addEventListener('change', applyGrain); applyGrain();
     const snd = panel.querySelector('#o-sound') as HTMLInputElement;
     snd.checked = localStorageGet('sound') !== '0';
