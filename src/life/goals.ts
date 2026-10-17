@@ -1,6 +1,6 @@
 import { has, Trait } from './persona';
 import { Person } from './people';
-import { PropKind } from './stock';
+import { BKind, BUILD } from './buildings';
 import { PROP_TEXT } from './requests';
 import { dirName } from './scouting';
 import type { Group } from './group';
@@ -8,7 +8,7 @@ import type { Group } from './group';
 const pickOf = <T,>(a: T[]) => a[(Math.random() * a.length) | 0];
 
 export type GoalKind = 'explore' | 'food' | 'water' | 'rest' | 'build' | 'salvage' | 'mend' | 'search';
-export interface GoalOpt { kind: GoalKind; who: Person; title: string; line: string; x?: number; z?: number; prop?: PropKind; a?: Person; b?: Person }
+export interface GoalOpt { kind: GoalKind; who: Person; title: string; line: string; x?: number; z?: number; prop?: BKind; a?: Person; b?: Person }
 
 /** The group's plan for the day: three people pitch at dawn, you pick one (or the most trusted wins). */
 export class Goals {
@@ -18,11 +18,12 @@ export class Goals {
   private day = 0;
   private start = 0;
   private ignored = new Map<number, number>();
+  private planned: import('./buildings').Building | null = null;
 
   constructor(private g: Group) {}
 
   active(k: GoalKind) { return !!this.cur && !this.judged && this.cur.kind === k; }
-  building(k: PropKind | 'wreck') { const c = this.cur; return !!c && !this.judged && ((c.kind === 'build' && c.prop === k) || (k === 'wreck' && c.kind === 'salvage')); }
+  building(k: BKind | 'wreck') { const c = this.cur; return !!c && !this.judged && ((c.kind === 'build' && c.prop === k) || (k === 'wreck' && c.kind === 'salvage')); }
 
   update() {
     const g = this.g, h = g.clock.hour;
@@ -91,7 +92,10 @@ export class Goals {
     const unknown = g.disc.pois.find(q => q.major && !q.known);
     if (mk) rest.push(() => { const w = pitcher(['brave', 'curious']); return w && { kind: 'explore', who: w, x: mk.x, z: mk.z, title: 'CHECK THE RUMOR', line: `Let's send people to see if it's true: "${mk.text}".` }; });
     else if (unknown) rest.push(() => { const w = pitcher(['brave', 'curious']), d = dirName(unknown.x - g.fire.x, unknown.z - g.fire.z); return w && { kind: 'explore', who: w, x: unknown.x, z: unknown.z, title: `EXPLORE ${d.toUpperCase()}`, line: `Nobody has been ${d} yet. Let's send people out.` }; });
-    for (const k of ['signalFire', 'sos', 'rainCatcher'] as PropKind[]) if (!g.stock.has(k)) rest.push(() => { const w = pitcher(['hardworking'], 'builder'); return w && { kind: 'build', who: w, prop: k, title: `BUILD ${PROP_TEXT[k].toUpperCase()}`, line: `If we all pitch in, we can build ${PROP_TEXT[k]} today.` }; });
+    // builds: in the crash, only the simple beach things; once the camp exists, real buildings
+    const C = g.camp, wants = C.wanted();
+    for (const k of ['signalFire', 'sos', 'rainCatcher'] as BKind[]) if (!C.has(k)) wants.push([k, `If we all pitch in, we can build ${PROP_TEXT[k]} today.`, 'builder']);
+    for (const [k, line, sk] of wants.filter(w => !C.planned(w[0]) || w[0] === 'hut').slice(0, 4)) rest.push(() => { const w = pitcher(['hardworking'], sk); return w && { kind: 'build', who: w, prop: k, title: `BUILD ${BUILD[k].label.toUpperCase()}`, line }; });
     if (!R.wreckDone) rest.push(() => { const w = pitcher(['brave'], 'mechanic'); return w && { kind: 'salvage', who: w, title: 'STRIP THE WRECK', line: "There's still stuff in that plane. Let's take it apart, carefully." }; });
     const ra = pool.find(a => pool.some(b => b !== a && S.rel(a, b) < -30));
     const rb = ra && pool.find(b => b !== ra && S.rel(ra, b) < -30);
@@ -130,17 +134,16 @@ export class Goals {
         break;
       }
       case 'build': {
-        const good = Math.random() < 0.85;
-        R.job(crew(3), R.spot(o.prop!), 'build', 70, () => {
-          if (good) { R.build(o.prop!); S.toast(`Everyone pitched in. We built ${PROP_TEXT[o.prop!]}!`, 'good'); S.log(`We built ${PROP_TEXT[o.prop!]} together.`); g.onSting(true); }
-          else { S.toast(`The ${PROP_TEXT[o.prop!].replace(/^(a|an) /, '')} didn't hold together.`, 'bad'); S.log(`We tried to build ${PROP_TEXT[o.prop!]}. It didn't work out.`); g.onSting(false); }
-        });
+        // into the build queue, at the front; the jobs system sends builders and gatherers
+        const b = g.camp.queue.find(x => x.kind === o.prop) ?? g.camp.add(o.prop!, true);
+        if (b) { g.camp.toFront(b); this.planned = b; }
+        else S.say(o.who, "...there's nowhere sensible to put it.");
         break;
       }
       case 'salvage': {
         const c = crew(3), good = Math.random() < 0.85;
         R.job(c, R.spot('wreck'), 'search', 50, () => {
-          if (good) { R.wreckDone = true; g.stock.add('snacks', 8); g.stock.add('water', 6); S.toast('We stripped the wreck: snacks, water bottles, a knife.', 'good'); S.log('We took the wreck apart and found snacks and bottled water.'); g.onSting(true); }
+          if (good) { R.wreckDone = true; g.stock.add('snacks', 8); g.stock.add('water', 6); g.stock.add('scrap', 8); S.toast('We stripped the wreck: snacks, water bottles, a knife.', 'good'); S.log('We took the wreck apart and found snacks and bottled water.'); g.onSting(true); }
           else { const p = pickOf(c); p.hurt = true; g.startHealing(p); S.toast(`${p.per.name} got cut on the wreck. We found nothing.`, 'bad', p); g.onSting(false); }
         });
         break;
@@ -163,7 +166,7 @@ export class Goals {
       case 'water': met = g.stock.today.water >= n * 0.8; text = met ? 'Every jug is full.' : 'Still short on water.'; break;
       case 'rest': text = 'A quiet day. People feel a little better.'; for (const p of g.people) if (p.mode === 'camp') S.mood(p, 'happy', 20); break;
       case 'explore': met = g.lastFind > this.start; text = met ? 'The scouts turned something up.' : 'Nothing new today.'; break;
-      case 'build': met = g.stock.has(o.prop!); text = met ? `${PROP_TEXT[o.prop!].charAt(0).toUpperCase() + PROP_TEXT[o.prop!].slice(1)} is standing.` : 'All that work, and nothing to show for it.'; break;
+      case 'build': { const b = this.planned, pr = b ? b.progress : 0; met = pr >= 0.5; const L = PROP_TEXT[o.prop!]; text = pr >= 1 ? `${L.charAt(0).toUpperCase() + L.slice(1)} is standing.` : met ? `${L.charAt(0).toUpperCase() + L.slice(1)} is coming along.` : b && g.camp.waitingFor(b) ? `We ran out of ${g.camp.waitingFor(b)} for ${L}.` : `Barely started on ${L}.`; break; }
       case 'salvage': met = g.requests.wreckDone; text = met ? 'The wreck gave us what it had.' : 'The wreck gave us nothing.'; break;
       case 'mend': { const a = o.a!, b = o.b!; S.addRel(a, b, 15); S.say(a, `Okay, ${b.per.name}. We're good.`); text = `${a.per.name} and ${b.per.name} made peace. For now.`; break; }
       case 'search': met = !(o.a!.mode === 'lost' || o.a!.mode === 'hurt'); text = met ? `${o.a!.per.name} is safe.` : `${o.a!.per.name} is still out there.`; break;

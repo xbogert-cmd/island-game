@@ -4,6 +4,9 @@ import { WalkGrid } from './path';
 import { B, N, World, generate } from '../world/island';
 import { rumorError } from './scouting';
 import { Stock } from './stock';
+import { Jobs, level } from './jobs';
+import { BUILD, BKind, stageCost } from './buildings';
+import type { Person } from './people';
 
 function flatWorld(): World {
   const h = new Float32Array(N * N).fill(2), biome = new Uint8Array(N * N).fill(B.Grass);
@@ -89,5 +92,33 @@ describe('stockpile', () => {
     const s = new Stock({ x: 100, z: 100 }, grid);
     s.add('fruit', 2); s.add('water', 3); s.add('fish', 4);
     expect(s.today).toEqual({ food: 6, water: 3 });
+  });
+});
+
+describe('jobs', () => {
+  const mk = (id: number, extra: Partial<Person> = {}) => ({ id, per: { traits: [], skill: 'none', strength: 'strong', weakness: 'clumsy' }, xp: {}, job: '', love: '', hate: '', ...extra }) as unknown as Person;
+  it('puts friends together before rivals', () => {
+    const a = mk(0), friend = mk(1), rival = mk(2);
+    const rel = (x: Person, y: Person) => { const k = [x.id, y.id].sort().join(); return k === '0,1' ? 60 : k === '0,2' ? -60 : 0; };
+    const J = Object.create(Jobs.prototype) as Jobs;
+    (J as unknown as { g: unknown }).g = { story: { rel } };
+    const score = (p: Person, crew: Person[]) => (J as unknown as { score: (p: Person, k: string, c: Person[]) => number }).score(p, 'wood', crew);
+    expect(score(friend, [a])).toBeGreaterThan(score(rival, [a]));
+  });
+  it('priority cycles NORMAL → HIGH → LOW → NORMAL', () => {
+    const J = Object.create(Jobs.prototype) as Jobs;
+    J.prio = { wood: 1 } as Jobs['prio'];
+    J.cyclePrio('wood'); expect(J.prio.wood).toBe(2);
+    J.cyclePrio('wood'); expect(J.prio.wood).toBe(0);
+    J.cyclePrio('wood'); expect(J.prio.wood).toBe(1);
+  });
+  it('experience words go Novice → Expert', () => {
+    expect([0, 6, 18, 40].map(level)).toEqual([0, 1, 2, 3]);
+  });
+  it('buildings are paid for in three stages that cover the full cost', () => {
+    for (const k of Object.keys(BUILD) as BKind[]) {
+      const st = stageCost(k), c = BUILD[k].cost;
+      for (const m of Object.keys(c) as (keyof typeof c)[]) expect(st[m]! * 3).toBeGreaterThanOrEqual(c[m]!);
+    }
   });
 });

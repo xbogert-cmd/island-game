@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { PX, U } from './shared';
+import { BUILD_ART } from './buildart';
 
 /**
  * Pixel sprites drawn as camera-facing (or ground-flat) quads in one instanced draw call.
@@ -178,18 +179,29 @@ const DEFS: Record<string, { frames: string[][]; outline?: boolean }> = {
     ['.yyyyy.', 'yyzzzyy', 'yyzzzyy', 'yyzzzyy', '.yzzzy.', '..yzy..', '.......', '..yyy..', '..yzy..', '..yyy..'],
     ['.ooooo.', 'oozzzoo', 'oozzzoo', 'oozzzoo', '.ozzzo.', '..ozo..', '.......', '..ooo..', '..ozo..', '..ooo..']] },
   // things people build
+  // material heaps and where they come from
+  hLog: { frames: [['tnnnnt', 'tnnnnt']] },
+  hBamboo: { frames: [['vVvVvVv', 'vVvVvVv']] },
+  hStone: { frames: [['.qq.', 'qqWq', 'Gqqq']] },
+  hVine: { frames: [['.VvV.', 'VvVvV', '.VvV.']] },
+  hScrap: { frames: [['WWgW', 'gWWG']] },
+  srcWood: { frames: [['.nnnn.', 'tttttt', '.nnnn.', '.nNNn.']] },
+  srcStone: { frames: [['..qq...', '.qWqq..', 'qqqGqq.', 'qGqqqqq']] },
+  srcBamboo: { frames: [['v.v.v', 'vVvVv', 'vVvVv', 'vVvVv', 'VvVvV']] },
+  srcVines: { frames: [['V.v.V', 'vVvVv', '.vVv.', 'V.v.V']] },
   signalFire: { frames: [['.....n.....', '....nNn....', '...nN.Nn...', '..nN...Nn..', '.nN.....Nn.', 'nNnnnnnnnNn']] },
   dryingRack: { frames: [['nnnnnnnnnn', 'n.S..S..Sn', 'n.S..S..Sn', 'n.e..e..en', 'n........n', 'n........n']] },
   rainCatcher: { frames: [['n.......n', 'bbbbbbbbb', '.bBBBBBb.', '..bBcBb..', 'n..bbb..n', 'n...g...n', 'n..ggg..n']] },
   lookout: { frames: [['nrrr.', 'nrRrr', 'nrr..', 'n....', 'n....', 'n....', 'n....', 'n....', 'n....', 'n....', 'nn...'], ['nrr..', 'nrRr.', 'nrrrr', 'n....', 'n....', 'n....', 'n....', 'n....', 'n....', 'n....', 'nn...']] },
   sos: { frames: [big(['qqq.qqq.qqq', 'q...q.q.q..', 'qqq.q.q.qqq', '..q.q.q...q', 'qqq.qqq.qqq'], 3)] },
+  ...BUILD_ART,
 };
 
 export type SpriteName = keyof typeof DEFS;
 export const ATLAS: Record<string, Rect[]> = {};
 
 export function buildAtlas() {
-  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const c = document.createElement("canvas"); c.width = 512; c.height = 256;
   const g = c.getContext('2d')!;
   let x = 1, y = 1, rowH = 0;
   for (const [name, def] of Object.entries(DEFS)) {

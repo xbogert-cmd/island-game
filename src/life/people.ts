@@ -10,7 +10,7 @@ export const SW = 20, SH = 26, FEET = 24;
 const shade = (h: string, f: number) => { const c = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) * f | 0); return `rgb(${c[0]},${c[1]},${c[2]})`; };
 
 export type Pose = 'idle' | 'walk' | 'run' | 'limp' | 'sit' | 'sleep' | 'cover' | 'search' | 'collect' | 'point' | 'wave' | 'whistle' | 'cheer' | 'argue' | 'slump' | 'startle' | 'fish' | 'eat' | 'build';
-export type Mode = 'asleep' | 'camp' | 'leader' | 'follow' | 'wait' | 'scout' | 'lost' | 'hurt' | 'rescued';
+export type Mode = 'asleep' | 'camp' | 'leader' | 'follow' | 'wait' | 'scout' | 'lost' | 'hurt' | 'rescued' | 'dead';
 export type Mood = 'none' | 'happy' | 'angry' | 'worried' | 'sad' | 'scared' | 'tired' | 'fond' | 'pain';
 export interface Pt { x: number; z: number }
 
@@ -23,7 +23,7 @@ export interface Person {
   act: string; actT: number; ax: number; az: number; partner: Person | null;
   /** short pose override (point, cheer, startle…) */
   poseO: Pose | null; poseT: number;
-  torch: boolean; carry: 0 | 1 | 2; hurt: boolean; heal: number;
+  torch: boolean; carry: 0 | 1 | 2 | 3; hurt: boolean; heal: number;
   mood: Mood; tmood: Mood; moodT: number; why: string;
   apart: number; apartHit: boolean;
   /** wants to ask the leader something (shows a ❗) */
@@ -31,13 +31,19 @@ export interface Person {
   /** what they are carrying to the pile */
   bring: string;
   hungry: boolean;
+  /** jobs: current job, work phase/timer, experience per job, loved/hated job, favorite (pinned) job */
+  job: string; wph: string; wT: number; xp: Record<string, number>; love: string; hate: string; pin: string; hateT: number;
+  /** stood night watch: sleeps in the next morning */
+  sleepIn: boolean; watched: boolean;
+  /** who rescued them (-1 = nobody) */
+  savedBy: number;
   step: number;
 }
 
 const MOOD_ICON: Record<Mood, string> = { none: '', happy: 'mHappy', angry: 'mAngry', worried: 'mWorry', sad: 'mSad', scared: 'mScared', tired: 'mSleep', fond: 'mFond', pain: 'mPain' };
 const FRAME_RATE: Partial<Record<Pose, number>> = { walk: 9, run: 13, limp: 6, wave: 4, argue: 5, cheer: 5, collect: 3, search: 1.5, startle: 0, fish: 0.5, eat: 2, build: 4 };
 
-type Arm = 'down' | 'fwd' | 'up' | 'out' | 'mouth' | 'torch' | 'bucket' | 'carry' | 'reach' | 'fist' | 'rod' | 'hamUp' | 'hamDown' | 'food';
+type Arm = 'down' | 'fwd' | 'up' | 'out' | 'mouth' | 'torch' | 'bucket' | 'carry' | 'log' | 'reach' | 'fist' | 'rod' | 'hamUp' | 'hamDown' | 'food';
 
 /** Pixel rectangles for one survivor frame, built facing right then mirrored. */
 export function personRects(p: Person) {
@@ -76,6 +82,7 @@ export function personRects(p: Person) {
   }
   if (p.carry === 1 && fa === 'down') fa = 'bucket';
   if (p.carry === 2 && fa === 'down') fa = 'carry';
+  if (p.carry === 3 && fa === 'down') fa = 'log';
   if (p.torch && (fa === 'down' || fa === 'bucket')) fa = 'torch';
   if (p.per.age === 'teen') t += 1;
 
@@ -96,6 +103,7 @@ export function personRects(p: Person) {
       case 'mouth': r(x, -9 + t, 1, 2, c); r(x - 1, -10 + t, 1, 1, L.skin); break;
       case 'torch': r(x, -10 + t, 1, 3, c); r(x, -11 + t, 1, 1, L.skin); r(x, -15 + t, 1, 4, '#6a4a2e'); break;
       case 'bucket': r(x, -8 + t, 1, 3, c); r(x, -5 + t, 3, 3, '#8a8a90'); r(x, -5 + t, 3, 1, '#5a5a60'); break;
+      case 'log': r(x, -9 + t, 1, 2, c); r(x - 4 * d, -11 + t, 7, 2, '#8a5a30'); r(x - 4 * d, -11 + t, 1, 2, '#c8a070'); break;
       case 'carry': r(x, -7 + t, 1, 2, c); r(x, -8 + t, 3, 2, '#e0a030'); r(x + 1, -9 + t, 1, 1, '#6bc06b'); break;
       case 'reach': r(x, -7 + t, 1, 2, c); r(x + d, -5 + t, 1, 2, c); r(x + d, -3 + t, 1, 1, L.skin); break;
       case 'fist': r(x, -11 + t, 1, 3, c); r(x, -12 + t, 1, 1, L.skin); break;
@@ -143,6 +151,7 @@ export class Survivors {
         id: i, per, x, z, face: side, pose: 'sleep', anim: Math.random() * 9, key: '', mode: 'asleep',
         path: [], repath: 0, stuck: 0, moving: false, act: '', actT: Math.random() * 3, ax: x, az: z, partner: null,
         poseO: null, poseT: 0, torch: false, carry: 0, hurt: false, heal: 0, mood: 'none', tmood: 'none', moodT: 0, why: '', apart: 0, apartHit: false, step: 0, ask: false, bring: '', hungry: false,
+        job: '', wph: '', wT: 0, xp: {}, love: '', hate: '', pin: '', hateT: 0, sleepIn: false, watched: false, savedBy: -1,
       });
     }
   }

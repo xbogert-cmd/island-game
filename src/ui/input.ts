@@ -10,6 +10,7 @@ import type { Person } from '../life/people';
  */
 export class Input {
   hover: Person | null = null;
+  mx = -1e4; my = -1e4;
   onPerson: (p: Person) => void = () => {};
   private v = new THREE.Vector3();
 
@@ -26,6 +27,7 @@ export class Input {
     });
     el.addEventListener('contextmenu', (e) => { e.preventDefault(); game.group.whistle(); });
     el.addEventListener('pointermove', (e) => {
+      this.mx = e.clientX; this.my = e.clientY;
       this.hover = game.group.leader ? this.pick(e.clientX, e.clientY) : null;
       el.style.cursor = game.group.scoutPick ? 'crosshair' : this.hover || this.trailAt(e.clientX, e.clientY) ? 'pointer' : 'default';
     });

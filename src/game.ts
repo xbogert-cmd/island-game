@@ -13,6 +13,7 @@ import { PITCH, PX, U } from './render/shared';
 import { Clock } from './sim/clock';
 import { Weather } from './sim/weather';
 import { Group } from './life/group';
+import { BUILD } from './life/buildings';
 import { ATLAS } from './render/sprites';
 import { Wildlife } from './life/wildlife';
 import { Particles } from './life/particles';
@@ -221,17 +222,45 @@ export class Game {
         }
       });
     }
+    // building materials in their own yard, a few steps further from the fire
+    const F = g.fire, ml = Math.hypot(P.x - F.x, P.z - F.z) || 1, M = { x: P.x + (P.x - F.x) / ml * 4, z: P.z + (P.z - F.z) / ml * 4 };
+    if (near(M.x, M.z)) {
+      const heaps = ([['hLog', st.mat.wood], ['hBamboo', st.mat.bamboo], ['hStone', st.mat.stone], ['hVine', st.mat.vines], ['hScrap', st.mat.scrap]] as [string, number][]).filter(h => h[1] > 0);
+      const gy = heightAt(w, M.x, M.z);
+      heaps.forEach(([spr, n], hi) => {
+        const cx = (hi - (heaps.length - 1) / 2) * 1.75;
+        let k = Math.min(10, Math.ceil(n / 2)), row = 0;
+        while (k > 0 && row < 4) {
+          const len = Math.min(k, 4 - row);
+          for (let j = 0; j < len; j++) { const dx = cx + (j - (len - 1) / 2) * 0.5; b.push(M.x + rr.x * dx, gy + row * 2.5 * yUp, M.z + rr.z * dx, ATLAS[spr][0]); }
+          k -= len; row++;
+        }
+      });
+    }
     const night = this.clock.night, lit = night > 0.3 && this.weather.rain < 0.5;
-    for (const pr of st.props) {
-      if (!near(pr.x, pr.z)) continue;
-      const gy = heightAt(w, pr.x, pr.z);
-      if (pr.kind === 'sos') { b.push(pr.x, gy + 0.04, pr.z, ATLAS.sos[0], false, 1, 1, 1, 1, true); continue; }
-      const fr = ATLAS[pr.kind]; b.push(pr.x, gy - 0.05, pr.z, fr[Math.floor(tt * 2) % fr.length]);
-      if (pr.kind === 'signalFire' && lit) {
-        for (let i = 0; i < 3; i++) { const dx = (i - 1) * 2.5 * PX; b.push(pr.x + rr.x * dx, gy + (2 + (i === 1 ? 2 : 0)) * yUp, pr.z + rr.z * dx, ATLAS.flame[Math.floor(tt * 9 + i) % 3], false, 1, 1, 1, 2); }
-        if (Math.random() < 0.15) this.particles.emit('dot1', pr.x + (Math.random() - 0.5) * 0.6, gy + 1, pr.z, { vy: 2.5, vx: (Math.random() - 0.5), max: 1, r: 1, g: 0.65, b: 0.25, emissive: true, fade: false });
-        if (Math.random() < 0.08) this.particles.emit('puff', pr.x, gy + 1.5, pr.z, { vy: 1.4, vx: U.uWindDir.value.x * 2, vz: U.uWindDir.value.y * 2, max: 3, r: 0.6, g: 0.6, b: 0.62, a: 0.6 });
+    const flames = (x: number, y: number, z: number, n: number, spread: number) => {
+      for (let i = 0; i < n; i++) { const dx = (i - (n - 1) / 2) * spread * PX; b.push(x + rr.x * dx, y + (i % 2 ? 2 : 0) * yUp, z + rr.z * dx, ATLAS.flame[Math.floor(tt * 9 + i) % 3], false, 1, 1, 1, 2); }
+      if (Math.random() < 0.12) this.particles.emit('dot1', x + (Math.random() - 0.5) * 0.6, y + 0.4, z, { vy: 2.5, vx: (Math.random() - 0.5), max: 1, r: 1, g: 0.65, b: 0.25, emissive: true, fade: false });
+      if (Math.random() < 0.06) this.particles.emit('puff', x, y + 1, z, { vy: 1.4, vx: U.uWindDir.value.x * 2, vz: U.uWindDir.value.y * 2, max: 3, r: 0.6, g: 0.6, b: 0.62, a: 0.6 });
+    };
+    for (const bd of g.camp.list) {
+      if (!near(bd.x, bd.z)) continue;
+      const gy = heightAt(w, bd.x, bd.z);
+      if (bd.kind === 'fence') {
+        const posts = bd.posts ?? [], n = Math.floor(bd.progress * posts.length);
+        posts.forEach((q, i) => { if (i < n) b.push(q.x, heightAt(w, q.x, q.z) - 0.05, q.z, ATLAS.fencePost[0]); else if (i < n + 3 && bd.progress > 0) b.push(q.x, heightAt(w, q.x, q.z) - 0.05, q.z, ATLAS.stakes[0]); });
+        continue;
       }
+      const flat = BUILD[bd.kind].flat, fr = ATLAS[bd.kind], R0 = fr[Math.floor(tt * 2) % fr.length];
+      if (bd.progress >= 1) b.push(bd.x, gy + (flat ? 0.04 : -0.05), bd.z, R0, false, 1, 1, 1, 1, flat);
+      else {
+        // going up: stakes first, then it rises out of the ground
+        b.push(bd.x, gy - 0.05, bd.z, ATLAS.stakes[0]);
+        if (bd.progress > 0.05) { const hh = Math.max(1, Math.round(R0.h * Math.min(1, 0.15 + bd.progress))); b.push(bd.x, gy + (flat ? 0.04 : -0.05), bd.z, { x: R0.x, y: R0.y + R0.h - hh, w: R0.w, h: hh }, false, 1, 1, 1, 1, flat); }
+        continue;
+      }
+      if (lit && (bd.kind === 'signalFire' || bd.kind === 'watchFire')) flames(bd.x, gy + (bd.kind === 'watchFire' ? 16 : 3) * yUp, bd.z, 3, 2.5);
+      if (lit && bd.kind === 'beacon') flames(bd.x, gy + 29 * yUp, bd.z, 5, 2.5);
     }
   }
 

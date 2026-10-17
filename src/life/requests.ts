@@ -1,6 +1,6 @@
 import { has } from './persona';
 import { Person, Pose, Pt } from './people';
-import { PropKind } from './stock';
+import { BKind, BUILD } from './buildings';
 import { rumorError } from './scouting';
 import type { Group } from './group';
 
@@ -20,9 +20,7 @@ export interface Req {
 }
 interface Job { who: Person[]; x: number; z: number; pose: Pose; secs: number; t: number; walkT: number; done: () => void }
 
-export const PROP_TEXT: Record<PropKind, string> = {
-  signalFire: 'a signal fire', dryingRack: 'a fish drying rack', rainCatcher: 'a rain catcher', lookout: 'a lookout flag', sos: 'SOS on the beach',
-};
+export const PROP_TEXT = Object.fromEntries(Object.entries(BUILD).map(([k, d]) => [k, d.label])) as Record<BKind, string>;
 
 /**
  * People coming to you: ideas (some good, some bad), questions, disputes, secrets, pairs.
@@ -40,7 +38,7 @@ export class Requests {
   private nextT = 70;
   private fishDay = -1;
   private lookSpot: Pt | null = null;
-  private spots: Partial<Record<PropKind, Pt>> = {};
+  private spots: Partial<Record<BKind, Pt>> = {};
 
   constructor(private g: Group) {}
 
@@ -52,26 +50,23 @@ export class Requests {
     r.answers[i]?.fn();
   }
 
-  /** Where each kind of thing gets built. */
-  spot(kind: PropKind | 'wreck'): Pt {
-    const g = this.g, F = g.fire, fs = g.fishSpot, near = (x: number, z: number) => g.grid.nearest(x, z) ?? { x, z };
-    switch (kind) {
-      case 'signalFire': return (this.spots.signalFire ??= g.shore(18, [fs]));
-      case 'sos': return (this.spots.sos ??= g.shore(22, [fs, this.spot('signalFire')]));
-      case 'rainCatcher': return near(F.x - 5, F.z + 5);
-      case 'dryingRack': return near(g.stock.pile.x + 1, g.stock.pile.z + 4);
-      case 'wreck': return near(g.w.crash.x + 3, g.w.crash.z + 3);
-      case 'lookout': {
-        if (this.lookSpot) return this.lookSpot;
-        let best = { x: F.x, z: F.z }, bh = -1;
-        for (let k = 0; k < 400; k++) {
-          const a = k * 2.399, r = 12 + (k % 40), x = F.x + Math.cos(a) * r, z = F.z + Math.sin(a) * r;
-          const h = g.grid.walkable(x, z) ? g.bodies.ground({ x, z }) : -1;
-          if (h > bh) { bh = h; best = { x, z }; }
-        }
-        return (this.lookSpot = best);
+  /** Where each kind of thing gets built (the camp's own spot for it, decided once). */
+  spot(kind: BKind | 'wreck'): Pt {
+    const g = this.g, F = g.fire, near = (x: number, z: number) => g.grid.nearest(x, z) ?? { x, z };
+    if (kind === 'wreck') return near(g.w.crash.x + 3, g.w.crash.z + 3);
+    if (kind === 'lookout') {
+      if (this.lookSpot) return this.lookSpot;
+      let best = { x: F.x, z: F.z }, bh = -1;
+      for (let k = 0; k < 400; k++) {
+        const a = k * 2.399, r = 12 + (k % 40), x = F.x + Math.cos(a) * r, z = F.z + Math.sin(a) * r;
+        const h = g.grid.walkable(x, z) ? g.bodies.ground({ x, z }) : -1;
+        if (h > bh) { bh = h; best = { x, z }; }
       }
+      return (this.lookSpot = best);
     }
+    const b = g.camp.list.find(x => x.kind === kind);
+    if (b) return b;
+    return (this.spots[kind] ??= g.camp.site(kind) ?? near(F.x + 6, F.z + 6));
   }
 
   /** Send people to do something. `done` runs when the work is finished. */
@@ -86,14 +81,8 @@ export class Requests {
   }
   busy(p: Person) { return this.jobs.some(j => j.who.includes(p)); }
 
-  /** Build a camp prop with a little celebration. */
-  build(kind: PropKind) {
-    const g = this.g, s = this.spot(kind);
-    if (g.stock.has(kind)) return;
-    g.stock.build(kind, s.x, s.z);
-    for (let i = 0; i < 10; i++) g.fx.emit('puff', s.x + (Math.random() - 0.5) * 2, g.bodies.ground(s) + 0.3, s.z + (Math.random() - 0.5) * 2, { vy: 1 + Math.random(), max: 1.2, r: 0.85, g: 0.8, b: 0.7, a: 0.7 });
-    g.onChime(false);
-  }
+  /** One person's idea worked: it's standing, no materials needed. */
+  build(kind: BKind) { this.g.camp.place(kind, true); }
 
   // ------------------------------------------------------------------ per frame
 
@@ -167,7 +156,7 @@ export class Requests {
     const cands = g.people.filter(p => p !== L && !p.hurt && p.pose !== 'sleep' && !this.busy(p) &&
       (p.mode === 'follow' || p.mode === 'wait' || (p.mode === 'camp' && Math.hypot(p.x - L.x, p.z - L.z) < 70 && p.act !== 'huddle')));
     if (!cands.length) return;
-    const makers = [this.pair, this.hoard, this.dispute, this.ration, this.whyThem, this.fish, this.signal, this.wreck, this.rainCatcher, this.lookout, this.sos, this.rescue]
+    const makers = [...(this.g.era === 'camp' ? [this.suggestBuild, this.suggestBuild] : []), this.pair, this.hoard, this.dispute, this.ration, this.whyThem, this.fish, this.signal, this.wreck, this.rainCatcher, this.lookout, this.sos, this.rescue]
       .sort(() => Math.random() - 0.5);
     for (const p of [...cands].sort(() => Math.random() - 0.5)) for (const mk of makers) {
       const r = mk.call(this, p);
@@ -240,11 +229,11 @@ export class Requests {
     const run = () => {
       this.fishDay = g.clock.day;
       this.idea(p, good, [p], g.fishSpot, 'fish', 40, () => {
-        const n = g.stock.has('dryingRack') ? 6 : 4;
+        const n = g.camp.has('dryingRack') ? 6 : 4;
         g.stock.add('fish', n);
         S.toast(`${p.per.name} caught fish!`, 'good', p); S.log(`${p.per.name} came back from the rocks with fish.`);
         S.revealSkill(p, `${p.per.name} pulled fish out of the surf like it was nothing. They grew up fishing.`);
-        if (!g.stock.has('dryingRack')) { this.build('dryingRack'); S.log(`${p.per.name} put up a rack to dry the fish, so it keeps.`); }
+        if (!g.camp.has('dryingRack')) { this.build('dryingRack'); S.log(`${p.per.name} put up a rack to dry the fish, so it keeps.`); }
       }, () => { S.say(p, 'Nothing bit. Not one.'); S.log(`${p.per.name} sat on the rocks all afternoon and caught nothing.`); }, 'fishing off the rocks');
     };
     const t = this.pitch(good, 'Let me take a line out on the rocks. We could have fish tonight.');
@@ -253,7 +242,7 @@ export class Requests {
 
   private signal(p: Person) {
     const g = this.g, S = g.story;
-    if (g.stock.has('signalFire') || g.goals.building('signalFire')) return null;
+    if (g.camp.has('signalFire') || g.goals.building('signalFire')) return null;
     const good = this.chance(p, 0.55, [[has(p.per, 'lazy'), 0.3], [has(p.per, 'hardworking'), 0.75], [p.per.skill === 'builder', 0.95]]);
     const run = () => {
       const h = this.helper(p);
@@ -272,7 +261,7 @@ export class Requests {
     if (this.wreckDone || g.goals.building('wreck')) return null;
     const good = this.chance(p, 0.5, [[has(p.per, 'brave'), 0.6], [p.per.skill === 'mechanic', 0.9], [p.per.weakness === 'clumsy', 0.2]]);
     const run = () => this.idea(p, good, [p], this.spot('wreck'), 'search', 40, () => {
-      this.wreckDone = true; g.stock.add('snacks', 8); g.stock.add('water', 6);
+      this.wreckDone = true; g.stock.add('snacks', 8); g.stock.add('water', 6); g.stock.add('scrap', 6);
       S.toast(`${p.per.name} dug snacks and water bottles out of the wreck!`, 'good', p); S.log(`${p.per.name} crawled through the wreck and came out with snacks and water.`);
     }, () => {
       p.hurt = true; S.say(p, 'Argh! Sharp metal!'); g.startHealing(p);
@@ -284,7 +273,7 @@ export class Requests {
 
   private rainCatcher(p: Person) {
     const g = this.g, S = g.story;
-    if (g.stock.has('rainCatcher') || g.goals.building('rainCatcher')) return null;
+    if (g.camp.has('rainCatcher') || g.goals.building('rainCatcher')) return null;
     const good = this.chance(p, 0.5, [[has(p.per, 'curious'), 0.7], [p.per.skill === 'builder', 0.92], [p.per.skill === 'mechanic', 0.85]]);
     const run = () => this.idea(p, good, [p], this.spot('rainCatcher'), 'build', 45, () => {
       this.build('rainCatcher');
@@ -296,7 +285,7 @@ export class Requests {
 
   private lookout(p: Person) {
     const g = this.g, S = g.story;
-    if (g.stock.has('lookout')) return null;
+    if (g.camp.has('lookout')) return null;
     const s = this.spot('lookout');
     const target = g.disc.pois.filter(q => q.major && !q.known && !g.disc.markers.some(m => m.poi === q)).sort((a, b) => Math.hypot(a.x - s.x, a.z - s.z) - Math.hypot(b.x - s.x, b.z - s.z))[0];
     if (!target) return null;
@@ -317,7 +306,7 @@ export class Requests {
 
   private sos(p: Person) {
     const g = this.g, S = g.story;
-    if (g.stock.has('sos') || g.goals.building('sos')) return null;
+    if (g.camp.has('sos') || g.goals.building('sos')) return null;
     const good = this.chance(p, 0.8, [[has(p.per, 'lazy'), 0.35]]);
     const run = () => {
       const h = this.helper(p);
@@ -329,6 +318,25 @@ export class Requests {
     };
     const t = this.pitch(good, "Let's spell SOS on the beach with rocks. Big enough for a plane to see.");
     return this.req(p, 'idea', t.text, good, [{ label: 'DO IT', cls: 'go', fn: run }, { label: 'LATER', fn: () => this.declined(p, good, 'an SOS sign') }], () => this.ignoreIdea(p, run), t.shy);
+  }
+
+  /** Camp era: someone wants something built. Yes puts it in the build queue and they throw themselves into it. */
+  private suggestBuild(p: Person) {
+    const g = this.g, S = g.story, w = g.camp.wanted();
+    if (!w.length || p.mode !== 'camp') return null;
+    const [kind, line, sk] = w.find(x => x[2] === p.per.skill) ?? w[(Math.random() * w.length) | 0];
+    const good = this.chance(p, 0.6, [[has(p.per, 'lazy'), 0.4], [has(p.per, 'liar'), 0.35], [has(p.per, 'hardworking'), 0.75], [p.per.skill === sk || p.per.skill === 'builder', 0.95]]);
+    const t = this.pitch(good, line);
+    return this.req(p, 'idea', t.text, good, [
+      { label: 'BUILD IT', cls: 'go', fn: () => {
+        const b = g.camp.add(kind, true); if (!b) { S.say(p, "...there's nowhere to put it."); return; }
+        b.doubt = !good; S.say(p, pickOf(["I'll get started.", 'Leave it to me.', 'Right away.']));
+        S.log(`${p.per.name} talked us into building ${BUILD[kind].label}.`);
+        if (p.mode === 'camp') { p.job = 'build'; p.wph = ''; }
+        const rec = this.record.get(p.id) ?? { good: 0, bad: 0 }; if (good) rec.good++; else rec.bad++; this.record.set(p.id, rec);
+      } },
+      { label: 'NOT YET', fn: () => this.declined(p, good, BUILD[kind].label) },
+    ], () => { S.trust(p, -1); }, t.shy);
   }
 
   // ------------------------------------------------------------------ questions, disputes, secrets, pairs

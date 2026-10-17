@@ -5,7 +5,13 @@ import { SECRET_LABEL, SKILL_LABEL, trustWord } from '../life/persona';
 import { PARTY_MAX } from '../life/group';
 import { dirName } from '../life/scouting';
 import { Input } from './input';
+import { load, saveInfo } from '../life/save';
 import { objectives } from '../life/objectives';
+import { JOB, JOB_KINDS, JobKind, LEVEL_WORD, PRIO_WORD, level } from '../life/jobs';
+import { BUILD } from '../life/buildings';
+import { drawIslandMap } from './islandmap';
+import { mapImage } from './hud';
+import { N } from '../world/island';
 
 const CSS = `
 .so { position: absolute; font-family: 'Press Start 2P', monospace; color: #f4f1e6; z-index: 6; user-select: none; }
@@ -49,8 +55,24 @@ const CSS = `
 #roster .nm { font-size: 10px; } #roster .nm span { font-size: 7px; opacity: .7; }
 #roster .g { color: #8af07a; } #roster .b { color: #ff8a7a; } #roster .k { color: #ffd65a; } #roster .dim { opacity: .7; }
 #roster .x { position: absolute; right: 14px; top: 12px; cursor: pointer; font-size: 12px; }
+#journal { left: 50%; top: 50%; right: auto; transform: translate(-50%, -50%); width: min(820px, 94vw); max-height: 88vh; padding: 16px 18px; z-index: 8; }
 #journal .d { color: #ffd65a; margin-top: 8px; }
 #journal p { margin: 2px 0 6px; }
+#journal .jl { max-height: 64vh; overflow-y: auto; }
+#journal .x, #roster .x { position: absolute; right: 14px; top: 12px; cursor: pointer; font-size: 12px; }
+.tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.tabs button.on { background: #3b4f9a; border-color: #ffd65a; }
+.tag { color: #1c1626; background: #ffd65a; border-radius: 4px; padding: 1px 3px; font-size: 6px; margin-left: 4px; }
+#roster .jr { display: grid; grid-template-columns: 190px 70px 1fr 160px; gap: 10px; align-items: center; padding: 6px 8px; border-bottom: 2px solid #1b2547; }
+#roster .jr .pr { cursor: pointer; text-align: center; border: 2px solid #4a5a9a; border-radius: 6px; padding: 3px 0; }
+#roster .jr .pr:hover { border-color: #ffd65a; }
+#roster .jr .p2 { color: #ffd65a; } #roster .jr .p0 { opacity: .6; }
+#roster .jr .who { display: flex; gap: 2px; flex-wrap: wrap; } #roster .jr .who canvas { width: 20px; height: 26px; }
+#roster .jr .st { opacity: .85; } #roster .jr .st.bad { color: #ff8a7a; }
+#roster .qr { padding: 5px 8px; cursor: pointer; border-radius: 6px; } #roster .qr:hover { background: #24305c; }
+#roster h5 { font-size: 9px; color: #ffd65a; margin: 14px 0 6px; font-weight: normal; }
+#goal .recap { font-size: 8px; line-height: 1.8; max-width: 640px; text-align: center; background: #121a33e6; border: 2px solid #2b3766; border-radius: 10px; padding: 8px 12px; }
+#title .sub { display: block; font-size: 11px; margin-top: 12px; text-align: center; opacity: .8; }
 #pick { inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: #0b102066; }
 #pick h2 { font-size: 18px; font-weight: normal; text-shadow: 0 3px 0 #000; margin: 0; }
 #pick .cards { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
@@ -105,14 +127,18 @@ export class Social {
   private obKeys = new Map<string, string>(); private obDone: { text: string; t: number }[] = [];
   private cardP: Person | null = null; private cardKey = ''; private partyKey = ''; private rosterKey = '';
   private tipT = 0; private momentT = 0; private refreshT = 0; private journalN = -1;
+  private peopleTab: 'roster' | 'jobs' = 'roster'; private islandTab: 'map' | 'journal' = 'map'; private mapBase: ImageData; private mapT = 0;
   private toastQ: { el: HTMLElement; t: number }[] = [];
 
   constructor(private game: Game, private input: Input) {
     const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
-    this.lead = this.el(`<div id="lead" class="so"><div class="me box"><canvas width="${SW}" height="${SH}"></canvas><div><div class="nm"></div><div class="sub"></div></div></div><div class="party box"></div><div class="btns"><button data-a="roster">ROSTER</button><button data-a="journal">JOURNAL</button></div></div>`);
+    this.lead = this.el(`<div id="lead" class="so"><div class="me box"><canvas width="${SW}" height="${SH}"></canvas><div><div class="nm"></div><div class="sub"></div></div></div><div class="party box"></div><div class="btns"><button data-a="roster">PEOPLE</button><button data-a="journal">ISLAND</button></div></div>`);
     this.card = this.el('<div id="card" class="so box"></div>');
     this.roster = this.el('<div id="roster" class="so box panel"></div>');
     this.journal = this.el('<div id="journal" class="so box panel"></div>');
+    this.mapBase = mapImage(game.world, 384);
+    this.roster.addEventListener('click', e => this.pageClick(e));
+    this.journal.addEventListener('click', e => this.pageClick(e));
     this.toastsEl = this.el('<div id="toasts" class="so"></div>');
     this.tip = this.el('<div id="tip" class="so box" style="opacity:0"></div>');
     this.title = this.el('<div id="title" class="so"></div>');
@@ -137,6 +163,13 @@ export class Social {
   private pickScreen() {
     const g = this.game.group;
     const pick = this.el('<div id="pick" class="so"><h2>WHO WILL LEAD?</h2><div class="cards"></div><div style="font-size:8px;opacity:.75">The others are waking up. Somebody has to take charge.</div></div>');
+    const info = saveInfo(this.game.world.seed);
+    if (info) {
+      const c = this.el(`<button class="go" style="font-size:11px;padding:14px 22px">CONTINUE — DAY ${info.day}, ${info.leader.toUpperCase()} LEADING</button>`);
+      pick.insertBefore(c, pick.firstChild);
+      c.onclick = () => { if (load(this.game)) { pick.remove(); this.lead.style.display = 'flex'; } else c.remove(); };
+      (pick.querySelector('h2') as HTMLElement).textContent = 'OR START OVER: WHO WILL LEAD?';
+    }
     for (const p of g.choices) {
       const c = this.el(`<div class="c box">${''}<h3>${p.per.name}</h3><div class="q">"${p.per.backstory}"</div>
         <div>${p.per.traits.map(cap).join(' · ')}</div><div>+ ${cap(p.per.strength)}</div><div>− ${cap(p.per.weakness)}</div>${p.per.secret ? '<div style="color:#ffd65a">? Seems to be hiding something</div>' : ''}</div>`, pick.querySelector('.cards') as HTMLElement);
@@ -154,7 +187,29 @@ export class Social {
     for (const q of R) { g.fillStyle = q[4]; g.fillRect(cx + q[0], FEET + q[1], q[2], q[3]); }
     return c;
   }
-  private toggle(e: HTMLElement) { const o = !e.classList.contains('open'); this.roster.classList.remove('open'); this.journal.classList.remove('open'); if (o) { e.classList.add('open'); this.journalN = -1; this.rosterKey = ''; this.refreshT = 0; } }
+  private toggle(e: HTMLElement) { const o = !e.classList.contains('open'); this.roster.classList.remove('open'); this.journal.classList.remove('open'); if (o) { e.classList.add('open'); this.journalN = -1; this.rosterKey = ''; this.refreshT = 0; this.mapT = 0; } }
+
+  /** Tabs, priorities, the build queue, the map: all clicks inside the two big pages. */
+  private pageClick(e: MouseEvent) {
+    const t = e.target as HTMLElement, g = this.game.group;
+    const tab = t.closest('[data-t]') as HTMLElement | null;
+    if (tab) {
+      const v = tab.dataset.t!;
+      if (v === 'roster' || v === 'jobs') { this.peopleTab = v; if (v === 'jobs') g.jobs.fresh = false; this.rosterKey = ''; this.fillRoster(); }
+      else { this.islandTab = v as 'map' | 'journal'; this.journalN = -1; this.mapT = 0; this.fillJournal(); }
+      return;
+    }
+    if (t.closest('.x')) { this.roster.classList.remove('open'); this.journal.classList.remove('open'); return; }
+    const pk = t.closest('[data-k]') as HTMLElement | null;
+    if (pk) { g.jobs.cyclePrio(pk.dataset.k as JobKind); this.rosterKey = ''; this.fillRoster(); return; }
+    const q = t.closest('[data-q]') as HTMLElement | null;
+    if (q) { const b = g.camp.queue.find(x => x.id === Number(q.dataset.q)); if (b) g.camp.toFront(b); this.rosterKey = ''; this.fillRoster(); return; }
+    if (t.tagName === 'CANVAS' && t.closest('.wrap')) {
+      const r = t.getBoundingClientRect(), x = ((e.clientX - r.left) / r.width) * N, z = ((e.clientY - r.top) / r.height) * N;
+      if (g.scoutPick) g.clickGround(x, z); else { this.game.rig.jumpTo(x, z); this.game.rig.followOn = false; }
+      this.journal.classList.remove('open');
+    }
+  }
   private closeCard() { this.card.classList.remove('open'); this.cardP = null; this.cardKey = ''; }
 
   openCard(p: Person) {
@@ -168,7 +223,7 @@ export class Social {
     const skill = S.skillKnown.has(p.id) ? SKILL_LABEL[per.skill] : '???';
     const secret = per.secret && S.secretKnown.has(p.id) ? SECRET_LABEL[per.secret] : '';
     const rec = g.requests.record.get(p.id);
-    const where = { asleep: 'Asleep', camp: 'At camp', leader: 'Leading', follow: 'With you', wait: 'Waiting for you', scout: 'Out scouting', lost: 'Lost!', hurt: 'Hurt, out there!', rescued: 'Coming home with you' }[p.mode];
+    const where = { dead: 'Dead', asleep: 'Asleep', camp: 'At camp', leader: 'Leading', follow: 'With you', wait: 'Waiting for you', scout: 'Out scouting', lost: 'Lost!', hurt: 'Hurt, out there!', rescued: 'Coming home with you' }[p.mode];
     const html = `<div class="x">✕</div><div class="hd"><div class="pc"></div><div style="flex:1">
       <h3>${per.name} <span style="font-size:8px;opacity:.7">${per.age}${isL ? ' · YOU' : ''}</span></h3>
       <div class="q">"${per.backstory}"</div>
@@ -178,6 +233,7 @@ export class Social {
       <div class="row"><b>Skill</b> ${skill}${secret ? ` &nbsp; <b>Secret</b> ${secret}` : ''}</div>
       <div class="row"><b>Now</b> ${where} ${MOOD_TXT[p.mood]} ${p.why}${p.ask ? ' · <b>❗ wants to talk</b>' : ''}</div>
       ${rec ? `<div class="row"><b>Ideas</b> ${rec.good} worked · ${rec.bad} didn't</div>` : ''}
+      <div class="row">${this.workLine(p).replace(/class="k"/g, '').replace('<span >Job</span>', '<b>Job</b>')}</div>
       ${isL ? '' : `<div class="row"><b>Trust in you</b> ${trustWord(per.trust)}</div>`}
       <div class="row">${fr ? `<b>Friend</b> ${fr.per.name} &nbsp; ` : ''}${rv ? `<b>Rival</b> ${rv.per.name}` : ''}</div>
       </div></div><div class="acts"></div>`;
@@ -186,6 +242,8 @@ export class Social {
     if (!isL && p.mode === 'camp') btns.push([g.party.length >= PARTY_MAX ? 'GROUP FULL' : 'COME WITH ME', 'go', () => g.invite(p)]);
     if (p.mode === 'follow' || p.mode === 'wait') btns.push(['GO BACK TO CAMP', '', () => g.dismiss(p)]);
     if (!isL && (p.mode === 'camp' || p.mode === 'follow' || p.mode === 'wait')) btns.push(['GO SCOUT', '', () => { g.askScout(p); if (g.scoutPick === p) { this.closeCard(); this.showTip(`Click where ${per.name} should scout. Right-click to cancel.`, 99); } }]);
+    const pj = (p.pin || p.job) as JobKind | '';
+    if (!isL && p.mode === 'camp' && pj) btns.push([p.pin ? 'UNPIN JOB' : `KEEP ON ${JOB[pj].label.toUpperCase()}`, '', () => { p.pin = p.pin ? '' : pj; }]);
     btns.push(['FIND', '', () => { if (p.mode === 'camp' || p === g.leader) { this.game.rig.jumpTo(p.x, p.z); this.game.rig.followOn = p === g.leader; } else { this.game.camWho = p; this.game.rig.followOn = true; } }]);
     // only rebuild when something changed, so a click is never lost to a refresh
     const key = p.id + html + btns.map(b => b[0]).join();
@@ -231,6 +289,7 @@ export class Social {
     if (this.tipT > 0 && (this.tipT -= dt) <= 0) this.tip.style.opacity = '0';
     if (!g.scoutPick && this.tipT > 50) this.tipT = 0.01;
     if (this.momentT > 0) { if ((this.momentT -= dt) <= 0) this.title.style.opacity = '0'; } else if (g.moments.length) this.moment();
+    else if (g.eraCards.length) { const c = g.eraCards.shift()!; this.title.innerHTML = `${c.title}<span class="sub">${c.sub}</span>`; this.title.style.opacity = '1'; this.momentT = 5; }
     this.drawBubbles();
     this.drawLabels();
     this.drawAsk();
@@ -261,7 +320,9 @@ export class Social {
     if (pk !== this.partyKey) this.fillParty(party, list, pk);
     if (this.cardP && this.card.classList.contains('open')) this.fillCard();
     if (this.roster.classList.contains('open')) this.fillRoster();
-    if (this.journal.classList.contains('open') && this.journalN !== S.journal.length) this.fillJournal();
+    if (this.journal.classList.contains('open') && (this.islandTab === 'map' ? (this.mapT -= 0.5) <= 0 : this.journalN !== S.journal.length)) { this.mapT = 1; this.fillJournal(); }
+    const pb = this.lead.querySelector('[data-a="roster"]') as HTMLElement, ph = g.jobs.fresh ? 'PEOPLE<span class="tag">NEW</span>' : 'PEOPLE';
+    if (pb.innerHTML !== ph) pb.innerHTML = ph;
   }
 
   private fillParty(party: HTMLElement, list: Person[], key: string) {
@@ -283,18 +344,18 @@ export class Social {
 
   /** Everyone at a glance: what they're good and bad at, what you've learned about them, how they feel about you. */
   private fillRoster() {
+    if (this.peopleTab === 'jobs') { this.fillJobs(); return; }
     const g = this.game.group, S = g.story;
-    const key = g.people.map(p => p.mode + p.mood + p.ask + trustWord(p.per.trust) + S.skillKnown.has(p.id) + S.secretKnown.has(p.id) + JSON.stringify(g.requests.record.get(p.id) ?? '')).join();
+    const key = 'r' + g.people.map(p => p.mode + p.mood + p.ask + trustWord(p.per.trust) + S.skillKnown.has(p.id) + S.secretKnown.has(p.id) + JSON.stringify(g.requests.record.get(p.id) ?? '')).join();
     if (key === this.rosterKey) return;
     this.rosterKey = key;
     const esc = (t: string) => t.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
-    this.roster.innerHTML = `<div class="x">✕</div><h4>SURVIVORS (${g.people.length}) — click someone for more</h4><div class="grid"></div>`;
-    (this.roster.querySelector('.x') as HTMLElement).onclick = () => this.roster.classList.remove('open');
+    this.roster.innerHTML = `<div class="x">✕</div>${this.peopleTabs()}<h4>SURVIVORS (${g.people.filter(p => p.mode !== 'dead').length}) — click someone for more</h4><div class="grid"></div>`;
     const grid = this.roster.querySelector('.grid') as HTMLElement;
     const order = [g.leader!, ...g.people.filter(p => p !== g.leader)];
     for (const p of order) {
       const per = p.per, isL = p === g.leader;
-      const where = { asleep: 'asleep', camp: 'at camp', leader: 'leading', follow: 'with you', wait: 'waiting', scout: 'scouting', lost: 'LOST', hurt: 'HURT', rescued: 'with you' }[p.mode];
+      const where = { dead: 'dead', asleep: 'asleep', camp: 'at camp', leader: 'leading', follow: 'with you', wait: 'waiting', scout: 'scouting', lost: 'LOST', hurt: 'HURT', rescued: 'with you' }[p.mode];
       const skill = S.skillKnown.has(p.id) ? SKILL_LABEL[per.skill] : '???';
       const secret = per.secret && S.secretKnown.has(p.id) ? SECRET_LABEL[per.secret] : '';
       const pair = per.pair >= 0 ? g.people[per.pair] : null, fr = S.friend(p), rv = S.rival(p), rec = g.requests.record.get(p.id);
@@ -308,6 +369,7 @@ export class Social {
         <div><span class="k">Skill</span> ${skill}${secret ? ` &nbsp; <span class="k">Secret</span> ${secret}` : ''}</div>
         ${ties ? `<div class="dim">${ties}</div>` : ''}
         ${rec ? `<div class="dim">Ideas: ${rec.good} worked · ${rec.bad} didn't</div>` : ''}
+        ${this.workLine(p)}
       </div>`;
       const r = this.el(`<div class="r">${html}</div>`, grid);
       r.prepend(this.portrait(p));
@@ -316,14 +378,65 @@ export class Social {
     }
   }
 
+  /** ISLAND page: the full map, or the journal. */
   private fillJournal() {
+    const tabs = `<div class="x">✕</div><div class="tabs"><button data-t="map" class="${this.islandTab === 'map' ? 'on' : ''}">MAP</button><button data-t="journal" class="${this.islandTab === 'journal' ? 'on' : ''}">JOURNAL</button></div>`;
+    if (this.islandTab === 'map') {
+      if (!this.journal.querySelector('.wrap')) this.journal.innerHTML = tabs + `<h4>THE ISLAND — click anywhere to look there</h4><div class="wrap"><canvas width="384" height="384"></canvas></div><div class="leg">◆ PLACE &nbsp; ~ WATER &nbsp; ✱ FOOD &nbsp; ■ BUILDING &nbsp; <span style="color:#ffd65a">? RUMOR</span> &nbsp; <span style="color:#ff5a4a">! TROUBLE</span> &nbsp; <span style="color:#8af07a">■ YOUR GROUP</span> &nbsp; <span style="color:#ffa040">■ SCOUT</span> &nbsp; □ YOU</div>`;
+      drawIslandMap(this.game, this.journal.querySelector('canvas')!, this.journal.querySelector('.wrap')!, this.mapBase);
+      return;
+    }
     const J = this.game.group.story.journal;
     this.journalN = J.length;
-    let html = '<h4>JOURNAL</h4>', day = -1;
+    let html = '', day = -1;
     for (const e of J) { if (e.day !== day) { day = e.day; html += `<div class="d">DAY ${day}</div>`; } html += `<p>${e.text}</p>`; }
-    this.journal.innerHTML = html;
-    this.journal.scrollTop = this.journal.scrollHeight;
+    this.journal.innerHTML = tabs + `<h4>JOURNAL</h4><div class="jl">${html}</div>`;
+    const jl = this.journal.querySelector('.jl') as HTMLElement; jl.scrollTop = jl.scrollHeight;
   }
+
+  private peopleTabs() {
+    const g = this.game.group;
+    return `<div class="tabs"><button data-t="roster" class="${this.peopleTab === 'roster' ? 'on' : ''}">ROSTER</button><button data-t="jobs" class="${this.peopleTab === 'jobs' ? 'on' : ''}">JOBS${g.jobs.fresh ? '<span class="tag">NEW</span>' : ''}</button></div>`;
+  }
+
+  /** What someone does all day, how good they are at it, what they like. */
+  private workLine(p: Person) {
+    const g = this.game.group, J = g.jobs;
+    const exp = Object.entries(p.xp).filter(([k, v]) => v >= 6 && (JOB[k as JobKind].skill !== p.per.skill || g.story.skillKnown.has(p.id))).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k, v]) => `${JOB[k as JobKind].label} (${LEVEL_WORD[level(v)]})`);
+    const likes = [J.likeKnown.has(p.id + ':love') ? `Loves ${JOB[p.love as JobKind].verb}` : '', J.likeKnown.has(p.id + ':hate') ? `Hates ${JOB[p.hate as JobKind].verb}` : ''].filter(Boolean).join(' · ');
+    const now = p.job ? `${JOB[p.job as JobKind].label}${p.pin ? ' 📌' : ''}` : p === g.leader ? 'Leading' : 'Free time';
+    return `<div><span class="k">Job</span> ${now}${exp.length ? ` <span class="dim">· ${exp.join(', ')}</span>` : ''}</div>${likes ? `<div class="dim">${likes}</div>` : ''}`;
+  }
+
+  /** JOBS tab: every job the camp has, who's on it, why it isn't getting done. No numbers to set. */
+  private fillJobs() {
+    const g = this.game.group, J = g.jobs, C = g.camp, st = g.stock, vis = J.visible();
+    const word = (n: number) => n <= 0 ? 'Out' : n < 6 ? 'Low' : n < 16 ? 'Enough' : 'Plenty';
+    const key = 'j' + vis.map(k => k + J.prio[k] + J.status(k) + g.people.filter(p => p.job === k).map(p => p.id).join('.')).join() + C.queue.map(b => b.id + ':' + Math.floor(b.progress * 3) + (C.waitingFor(b) ?? '')).join() + Object.values(st.mat).map(word).join() + J.fresh;
+    if (key === this.rosterKey) return;
+    this.rosterKey = key;
+    const shiftG = { day: '☀', evening: '☀☾', night: '☾' };
+    let html = `<div class="x">✕</div>${this.peopleTabs()}<h4>JOBS — the camp decides who does what. Click a priority to change it.</h4>`;
+    if (!vis.length) html += '<div class="dim" style="line-height:2">No jobs yet. Find fresh water and food first; jobs show up as the camp can do them.</div>';
+    for (const k of JOB_KINDS) if (vis.includes(k)) {
+      const s = J.status(k), bad = s === 'Short-handed' || s.startsWith('Waiting') || s === 'Raining';
+      html += `<div class="jr"><span>${JOB[k].label} <span class="dim">${shiftG[JOB[k].shift]}</span></span><span class="pr p${J.prio[k]}" data-k="${k}">${PRIO_WORD[J.prio[k]]}</span><span class="who" data-w="${k}"></span><span class="st ${bad ? 'bad' : ''}">${s}</span></div>`;
+    }
+    if (C.queue.length) {
+      html += '<h5>BUILD QUEUE — click one to build it next</h5>';
+      for (const b of C.queue) {
+        const m = C.waitingFor(b), stage = b.progress <= 0 ? 'Planned' : b.progress < 0.34 ? 'Stakes in' : b.progress < 0.67 ? 'Frame up' : 'Almost done';
+        html += `<div class="qr" data-q="${b.id}">› ${cap(BUILD[b.kind].label)} — ${stage}${m ? ` <span style="color:#ff8a7a">· waiting for ${m}</span>` : ''}</div>`;
+      }
+    }
+    if (g.era !== 'crash') html += `<h5>MATERIALS</h5><div>Wood: ${word(st.mat.wood)} · Bamboo: ${word(st.mat.bamboo)} · Stone: ${word(st.mat.stone)} · Vines: ${word(st.mat.vines)} · Scrap: ${word(st.mat.scrap)}</div>`;
+    const free = g.people.filter(p => p !== g.leader && p.mode === 'camp' && !p.job && !p.hurt);
+    html += `<h5>FREE RIGHT NOW</h5><div class="dim">${free.length ? free.map(p => p.per.name).join(', ') : 'Nobody — everyone is busy.'}</div>`;
+    this.roster.innerHTML = html;
+    for (const el of this.roster.querySelectorAll('[data-w]')) for (const p of g.people.filter(p => p.job === (el as HTMLElement).dataset.w)) { const c = this.portrait(p); c.title = p.per.name; el.appendChild(c); }
+  }
+
+
 
   private drawBubbles() {
     const S = this.game.group.story, z = this.game.rig.zoom, w = this.game.world, seen = new Set<object>();
@@ -362,6 +475,14 @@ export class Social {
     }
     for (const m of g.disc.markers) if (m.kind === '?' && inView(m.x, m.z) && Math.hypot(m.x - t.x, m.z - t.z) < near + m.r) put('m' + m.id, 'lbl rum', m.text, m.x, m.z, 1.6);
     if (zi === 0 && inView(g.fire.x, g.fire.z)) put('camp', 'lbl map', '◆ Camp', g.fire.x, g.fire.z, 4);
+    // hovering a building says what it is and whose it is
+    let hb = null, hd = 26 * this.game.rig.zoom;
+    for (const b of g.camp.list) { if (b.kind === 'fence') continue; const sc = this.input.screen(b.x, heightAt(w, b.x, b.z) + 1, b.z), d = Math.hypot(sc.x - this.input.mx, sc.y - this.input.my); if (d < hd) { hd = d; hb = b; } }
+    if (hb) {
+      const d = BUILD[hb.kind], own = hb.owners.map(i => g.people[i].per.name).join(' & ');
+      const text = hb.progress < 1 ? `${cap(d.label)} — being built` : `${own ? `${own}'s hut` : cap(d.label)} — ${d.desc}${hb.shaky ? ' (shaky)' : ''}`;
+      put('hb', 'lbl map', text, hb.x, hb.z, 3.2);
+    }
     for (const [k, e] of this.labels) if (!seen.has(k)) e.style.display = 'none';
   }
 
@@ -390,7 +511,7 @@ export class Social {
     const key = opts.map(o => o.who.id + o.title).join();
     if (key !== this.goalKey) {
       this.goalKey = key; this.goalT = 30;
-      this.goalEl.innerHTML = '<h2>WHAT DO WE DO TODAY?</h2><div class="cards box" style="background:none;border:0;box-shadow:none"></div><div class="bar"><i></i></div>';
+      this.goalEl.innerHTML = (this.game.group.recap ? `<div class="recap"><b style="color:#ffd65a;font-weight:normal">YESTERDAY:</b> ${this.game.group.recap}</div>` : '') + '<h2>WHAT DO WE DO TODAY?</h2><div class="cards box" style="background:none;border:0;box-shadow:none"></div><div class="bar"><i></i></div>';
       const cards = this.goalEl.querySelector('.cards') as HTMLElement;
       opts.forEach((o, i) => {
         const c = this.el(`<div class="c box"><h3></h3><div class="q"></div><div style="opacity:.7;margin-top:4px"></div></div>`, cards);

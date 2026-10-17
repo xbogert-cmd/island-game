@@ -2,8 +2,9 @@ import { B, LandmarkKind, N, World, heightAt } from '../world/island';
 import { mulberry32 } from '../world/noise';
 import { WalkGrid } from './path';
 import { Person, Pt } from './people';
+import type { Mat } from './stock';
 
-export type PoiKind = LandmarkKind | 'water' | 'food' | 'waterfall' | 'crater' | 'clue';
+export type PoiKind = LandmarkKind | 'water' | 'food' | 'waterfall' | 'crater' | 'clue' | 'material';
 export interface Poi {
   id: number; kind: PoiKind; x: number; z: number;
   sight: number;           // how far away it can be noticed
@@ -15,6 +16,7 @@ export interface Poi {
   sprite?: string;         // food spots and clues are drawn
   note?: string;           // something found there (journal + next clue)
   next?: number;           // poi id the note points to
+  mat?: Mat;               // material sources
 }
 export interface Marker { id: number; x: number; z: number; r: number; kind: '?' | '!'; text: string; poi: Poi | null; who: Person | null; fake: boolean }
 
@@ -80,6 +82,26 @@ export class Discovery {
     for (let i = 0; i < 3; i++) tryFood([B.Jungle, B.Grass], 'fruitBush', 'a fruit grove');
     for (let i = 0; i < 2; i++) tryFood([B.Beach], 'coconuts', 'coconut palms');
     for (let i = 0; i < 2; i++) tryFood([B.TideRock, B.Beach], 'shells', 'shellfish');
+    // material sources: a woodland by camp (known from the start), the wreck for scrap, the rest out there
+    const tryMat = (biomes: number[], mat: Mat, sprite: string, label: string, near?: [number, number]) => {
+      for (let k = 0; k < 4000; k++) {
+        const x = 30 + rnd() * (N - 60), z = 30 + rnd() * (N - 60), b = w.biome[(z | 0) * N + (x | 0)];
+        if (!biomes.includes(b) || !grid.walkable(x, z) || heightAt(w, x, z) < 0.6) continue;
+        const d = Math.hypot(x - fire.x, z - fire.z);
+        if (near ? d < near[0] || d > near[1] : d < 40) continue;
+        if (this.pois.some(p => Math.hypot(p.x - x, p.z - z) < 25)) continue;
+        return add('material', x, z, 18, false, label, { sprite, mat });
+      }
+    };
+    tryMat([B.Jungle, B.Grass, B.Bamboo], 'wood', 'srcWood', 'a woodland', [14, 45]);
+    const wr = grid.nearest(w.crash.x + 4, w.crash.z - 3) ?? { x: w.crash.x, z: w.crash.z };
+    add('material', wr.x, wr.z, 10, false, 'the wreck (scrap)', { mat: 'scrap' });
+    tryMat([B.Highland, B.TideRock, B.Volcanic], 'stone', 'srcStone', 'a rock outcrop', [30, 110]) ?? tryMat([B.Beach, B.TideRock], 'stone', 'srcStone', 'a stony beach', [30, 110]);
+    tryMat([B.Highland, B.TideRock, B.Volcanic], 'stone', 'srcStone', 'a rock outcrop');
+    tryMat([B.Bamboo], 'bamboo', 'srcBamboo', 'a bamboo grove', [25, 120]) ?? tryMat([B.Jungle], 'bamboo', 'srcBamboo', 'a bamboo grove');
+    tryMat([B.Bamboo], 'bamboo', 'srcBamboo', 'a bamboo grove');
+    tryMat([B.Jungle], 'vines', 'srcVines', 'a vine tangle', [25, 110]);
+    tryMat([B.Jungle, B.Swamp], 'vines', 'srcVines', 'a vine tangle');
     // clue chains
     const find = (k: PoiKind) => this.pois.find(p => p.kind === k);
     const tail = find('tail');

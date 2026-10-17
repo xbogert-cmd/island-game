@@ -5,9 +5,12 @@ import { Hud } from './ui/hud';
 import { ZOOMS } from './render/camera';
 import { Input } from './ui/input';
 import { Social } from './ui/social';
+import { LAST, autosave } from './life/save';
 
 const params = new URLSearchParams(location.search);
-const seed = Number(params.get('seed')) || ((Math.random() * 1e9) | 0);
+// the island you were last on, unless the link asks for another
+const lastSeed = (() => { try { return Number(localStorage.getItem(LAST)) || 0; } catch { return 0; } })();
+const seed = Number(params.get('seed')) || lastSeed || ((Math.random() * 1e9) | 0);
 const loading = document.getElementById('loading')!;
 addEventListener('error', (e) => { loading.textContent = 'Error: ' + e.message; console.error(e.error); });
 
@@ -35,6 +38,7 @@ requestAnimationFrame(() => setTimeout(() => {
     const L = g.leader, f = g.fire;
     audio.life(Math.hypot(f.x - t.x, f.z - t.z), game.clock.night > 0.5 && !!L, !!L && L.moving);
   });
+  autosave(game);
   (window as unknown as { game: Game }).game = game;
   loading.remove();
 }, 30));

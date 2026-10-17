@@ -16,6 +16,9 @@ export function objectives(g: Group): Objective[] {
   const r = g.requests.cur;
   if (r) out.push({ key: 'ask', text: `${r.p.per.name} wants to talk (❗)`, x: r.p.x, z: r.p.z });
   if (g.goals.opts.length) out.push({ key: 'plan', text: 'Pick a plan for today' });
+  // the camp's own problems: things to fix
+  for (const pr of g.jobs.problems().slice(0, 2)) out.push(pr);
+  for (const p of g.people) if (p.hurt && p.mode === 'camp' && !g.camp.has('sickbay') && g.era !== 'crash' && !g.camp.planned('sickbay')) { out.push({ key: 'hurt' + p.id, text: `${p.per.name} is hurt: a sick bay would help` }); break; }
   if (!g.party.length && g.clock.day <= 2) out.push({ key: 'party', text: 'Click a survivor to bring them along' });
   if (!known('water')) out.push({ key: 'water', text: 'Find fresh water (try following a river)' });
   if (!known('food')) out.push({ key: 'food', text: 'Find food near camp' });

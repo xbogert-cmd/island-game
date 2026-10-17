@@ -6,6 +6,7 @@ import type { Ambience } from '../audio/ambience';
 import { U } from '../render/shared';
 import { MAP } from '../life/discovery';
 import { ZOOMS } from '../render/camera';
+import { clearSave, stopSaving } from '../life/save';
 
 const CSS = `
 .hud { position: absolute; font-family: 'Press Start 2P', monospace; color: #f4f1e6; user-select: none; z-index: 5; }
@@ -26,11 +27,11 @@ const CSS = `
 #help { width: min(760px, 94vw); max-height: 84vh; overflow-y: auto; font-size: 8px; line-height: 2; }
 #help h5 { font-size: 9px; color: #ffd65a; margin: 12px 0 4px; font-weight: normal; }
 #help .row { display: flex; gap: 12px; } #help .row b { flex: none; width: 210px; font-weight: normal; color: #9fb0ff; }
-#bigmap .wrap { position: relative; line-height: 0; }
-#bigmap canvas { image-rendering: pixelated; width: min(78vh, 86vw); height: min(78vh, 86vw); border-radius: 8px; cursor: crosshair; }
-#bigmap .ml { position: absolute; transform: translate(-50%, -130%); font: 8px 'Press Start 2P', monospace; color: #fff; text-shadow: 0 2px 0 #000, 0 0 3px #000; white-space: nowrap; pointer-events: none; line-height: 1; }
-#bigmap .ml.r { color: #ffd65a; font-size: 7px; } #bigmap .ml.c { color: #ffdd55; }
-#bigmap .leg { font-size: 7px; opacity: .8; margin-top: 10px; line-height: 1.8; }
+#journal .wrap { position: relative; line-height: 0; }
+#journal canvas { image-rendering: pixelated; width: min(78vh, 86vw); height: min(78vh, 86vw); border-radius: 8px; cursor: crosshair; }
+#journal .ml { position: absolute; transform: translate(-50%, -130%); font: 8px 'Press Start 2P', monospace; color: #fff; text-shadow: 0 2px 0 #000, 0 0 3px #000; white-space: nowrap; pointer-events: none; line-height: 1; }
+#journal .ml.r { color: #ffd65a; font-size: 7px; } #journal .ml.c { color: #ffdd55; }
+#journal .leg { font-size: 7px; opacity: .8; margin-top: 10px; line-height: 1.8; }
 #zoom { top: 116px; left: 222px; display: flex; gap: 6px; align-items: center; }
 #zoom button { font: 10px 'Press Start 2P', monospace; color: #f4f1e6; background: #121a33e6; border: 3px solid #2b3766; border-radius: 10px; padding: 8px 10px; cursor: pointer; }
 #zoom .dots { font-size: 10px; letter-spacing: 2px; text-shadow: 0 2px 0 #000; }
@@ -78,7 +79,7 @@ const BIOME_RGB: Record<number, number[]> = {
 
 export class Hud {
   private clockEl: HTMLElement; private wxEl: HTMLElement; private zoomEl: HTMLElement;
-  private help: HTMLElement; private big: HTMLElement; private bigBase: ImageData; private bigT = 0;
+  private help: HTMLElement;
   private mini: HTMLCanvasElement; private miniBase: ImageData; private miniDim: ImageData; private dimVer = -1; private dimT = 0;
   constructor(private game: Game, audio: Ambience) {
     const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
@@ -116,30 +117,23 @@ export class Hud {
       miniWrap.title = best;
     });
 
-    const rb = el('<div id="rbtns" class="hud"><button class="btn" data-b="map">MAP</button><button class="btn" data-b="help">?</button><button id="gear" class="btn">⚙ SETTINGS</button></div>');
+    const rb = el('<div id="rbtns" class="hud"><button class="btn" data-b="help">?</button><button id="gear" class="btn">⚙ SETTINGS</button></div>');
     const gear = rb.querySelector('#gear') as HTMLElement;
     this.help = el(`<div id="help" class="page"><div class="x">✕</div><h4>HOW TO PLAY</h4>${HELP}</div>`);
-    this.big = el('<div id="bigmap" class="page"><div class="x">✕</div><h4>THE ISLAND — click anywhere to look there</h4><div class="wrap"><canvas width="384" height="384"></canvas></div><div class="leg">◆ PLACE &nbsp; ~ WATER &nbsp; ✱ FOOD &nbsp; <span style="color:#ffd65a">? RUMOR</span> &nbsp; <span style="color:#ff5a4a">! TROUBLE</span> &nbsp; <span style="color:#8af07a">■ YOUR GROUP</span> &nbsp; <span style="color:#ffa040">■ SCOUT</span> &nbsp; □ YOU</div></div>');
-    this.bigBase = mapImage(game.world, 384);
-    const close = () => { this.help.classList.remove('open'); this.big.classList.remove('open'); };
-    for (const pg of [this.help, this.big]) (pg.querySelector('.x') as HTMLElement).onclick = close;
+    const close = () => { this.help.classList.remove('open'); };
+    (this.help.querySelector('.x') as HTMLElement).onclick = close;
     rb.querySelectorAll('[data-b]').forEach(b => b.addEventListener('click', () => {
-      const pg = (b as HTMLElement).dataset.b === 'map' ? this.big : this.help, o = !pg.classList.contains('open');
-      close(); if (o) { pg.classList.add('open'); if (pg === this.big) this.drawBig(); }
+      const pg = this.help, o = !pg.classList.contains('open');
+      close(); if (o) pg.classList.add('open');
     }));
     addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
-    const bc = this.big.querySelector('canvas')!;
-    bc.addEventListener('click', e => {
-      const r = bc.getBoundingClientRect(), x = ((e.clientX - r.left) / r.width) * N, z = ((e.clientY - r.top) / r.height) * N;
-      if (game.group.scoutPick) game.group.clickGround(x, z); else { game.rig.jumpTo(x, z); game.rig.followOn = false; }
-      close();
-    });
     const panel = el(`<div id="panel" class="hud">
       <label>Outlines <input id="o-filter" type="checkbox"></label>
       <label>Texture grain <select id="o-grain"><option value="0">Smooth</option><option value="0.35">Soft</option><option value="0.65">Medium</option><option value="1">Classic</option></select></label>
       <label>Sound <input id="o-sound" type="checkbox" checked></label>
       <label>Weather <select id="o-wx"><option value="auto">Auto</option><option>clear</option><option>cloudy</option><option>rain</option><option>storm</option></select></label>
       <label>Seed <input id="o-seed" type="text" value="${game.world.seed}"></label>
+      <button class="btn" id="o-again">NEW GAME (SAME ISLAND)</button>
       <button class="btn" id="o-go">NEW ISLAND</button>
       <button class="btn" id="o-rand">RANDOM ISLAND</button>
     </div>`);
@@ -161,6 +155,7 @@ export class Hud {
     });
     const go = (seed: string | number) => { location.search = `?seed=${seed}`; };
     panel.querySelector('#o-go')!.addEventListener('click', () => go((panel.querySelector('#o-seed') as HTMLInputElement).value || 1));
+    panel.querySelector('#o-again')!.addEventListener('click', () => { if (confirm('Start this island over? Your saved game on it will be lost.')) { stopSaving(); clearSave(game.world.seed); go(game.world.seed); } });
     panel.querySelector('#o-rand')!.addEventListener('click', () => go((Math.random() * 1e9) | 0));
     el('<div id="hint" class="hud pill">CLICK: GO &nbsp; RIGHT-CLICK: WHISTLE &nbsp; DRAG: LOOK &nbsp; SCROLL: ZOOM &nbsp; Q/E: TURN</div>');
     document.querySelectorAll('.hud').forEach(e => e.addEventListener('pointerdown', (ev: Event) => ev.stopPropagation()));
@@ -169,7 +164,6 @@ export class Hud {
 
 
   update() {
-    if (this.big.classList.contains('open') && (this.bigT -= 1 / 60) <= 0) { this.bigT = 0.5; this.drawBig(); }
     const g = this.game, c = g.clock, wx = g.weather;
     const night = c.night > 0.5, h = c.hour;
     const dots = ZOOMS.map((_, i) => i === g.rig.zoomI ? '●' : '○').join('');
@@ -189,7 +183,7 @@ export class Hud {
     }
     m.putImageData(this.miniDim, 0, 0);
     for (const p of disc.pois) if (p.known) {
-      m.fillStyle = p.kind === 'water' ? '#7fd8ff' : p.kind === 'food' ? '#8af07a' : '#ffffff';
+      m.fillStyle = p.kind === 'water' ? '#7fd8ff' : p.kind === 'food' ? '#8af07a' : p.kind === 'material' ? '#d8a060' : '#ffffff';
       const x = p.x * k, y = p.z * k;
       if (p.major) { m.beginPath(); m.moveTo(x, y - 3); m.lineTo(x + 3, y); m.lineTo(x, y + 3); m.lineTo(x - 3, y); m.fill(); } else m.fillRect(x - 1.5, y - 1.5, 3, 3);
     }
@@ -213,35 +207,7 @@ export class Hud {
     const cr = g.world.crash; m.fillStyle = '#ffdd55'; m.fillRect(cr.x * k - 1.5, cr.z * k - 1.5, 3, 3);
   }
 
-  /** The full island map: what you know, where everyone is, every name. */
-  private drawBig() {
-    const G = this.game, g = G.group, d = g.disc, S = 384, k = S / N, cv = this.big.querySelector('canvas')!, m = cv.getContext('2d')!;
-    const img = new ImageData(new Uint8ClampedArray(this.bigBase.data), S, S), ex = d.explored;
-    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (!ex[(y >> 1) * MAP + (x >> 1)]) { const o = (y * S + x) * 4; img.data[o] *= 0.5; img.data[o + 1] *= 0.5; img.data[o + 2] *= 0.55; }
-    m.putImageData(img, 0, 0);
-    for (const tr of g.scouting.trips) { m.fillStyle = '#ffd08a'; for (const q of tr.trail) m.fillRect(q.x * k - 0.5, q.z * k - 0.5, 1.5, 1.5); }
-    for (const mk of d.markers) { m.strokeStyle = mk.kind === '!' ? '#ff5a4a' : '#ffd65a'; m.lineWidth = 2; m.setLineDash([3, 3]); m.beginPath(); m.arc(mk.x * k, mk.z * k, Math.max(5, mk.r * k), 0, 6.283); m.stroke(); m.setLineDash([]); }
-    for (const p of d.pois) if (p.known) {
-      const x = p.x * k, y = p.z * k;
-      if (p.major) { m.fillStyle = '#000'; m.beginPath(); m.moveTo(x, y - 6); m.lineTo(x + 6, y); m.lineTo(x, y + 6); m.lineTo(x - 6, y); m.fill(); m.fillStyle = '#fff'; m.beginPath(); m.moveTo(x, y - 4); m.lineTo(x + 4, y); m.lineTo(x, y + 4); m.lineTo(x - 4, y); m.fill(); }
-      else { m.fillStyle = '#000'; m.fillRect(x - 3, y - 3, 6, 6); m.fillStyle = p.kind === 'water' ? '#7fd8ff' : '#8af07a'; m.fillRect(x - 2, y - 2, 4, 4); }
-    }
-    for (const p of g.people) {
-      if (p === g.leader || p.mode === 'asleep') continue;
-      m.fillStyle = p.mode === 'scout' ? '#ffa040' : p.mode === 'lost' || p.mode === 'hurt' ? '#ff5a4a' : p.mode === 'camp' ? '#d8d8d8' : '#8af07a';
-      m.fillRect(p.x * k - 1.5, p.z * k - 1.5, 3, 3);
-    }
-    const f = g.fire; m.fillStyle = '#000'; m.fillRect(f.x * k - 4, f.z * k - 4, 8, 8); m.fillStyle = '#ffdd55'; m.fillRect(f.x * k - 3, f.z * k - 3, 6, 6);
-    const L = g.leader; if (L) { m.fillStyle = '#000'; m.fillRect(L.x * k - 4, L.z * k - 4, 8, 8); m.fillStyle = '#fff'; m.fillRect(L.x * k - 2, L.z * k - 2, 4, 4); }
-    // names as text over the canvas
-    const wrap = this.big.querySelector('.wrap') as HTMLElement;
-    wrap.querySelectorAll('.ml').forEach(e => e.remove());
-    const r = cv.getBoundingClientRect(), sc = r.width / N;
-    const lab = (t: string, x: number, z: number, cls = '') => { const e = document.createElement('div'); e.className = 'ml ' + cls; e.textContent = t; e.style.left = `${x * sc}px`; e.style.top = `${z * sc}px`; wrap.appendChild(e); };
-    for (const p of d.pois) if (p.known && p.major) { const t = d.display(p); lab(t.charAt(0).toUpperCase() + t.slice(1), p.x, p.z); }
-    for (const mk of d.markers) lab(mk.kind === '!' ? mk.text : '? ' + mk.text, mk.x, mk.z, 'r');
-    lab('Camp', f.x, f.z, 'c');
-  }
+
 }
 
 /** The island as a picture, S×S pixels: biome colors, a little hill shading, rivers. */

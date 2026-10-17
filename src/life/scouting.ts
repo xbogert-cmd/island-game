@@ -152,8 +152,8 @@ export class Scouting {
     const p = t.p, g = this.g, per = p.per, dn = dirName(t.dir.x, t.dir.z);
     this.trips = this.trips.filter(x => x !== t);
     p.mode = 'camp'; p.act = ''; p.torch = false; p.path = [];
-    const res = t.found.filter(q => (q.kind === 'water' || q.kind === 'food') && !q.known);
-    const places = t.found.filter(q => q.kind !== 'water' && q.kind !== 'food' && q.kind !== 'clue' && !q.known);
+    const res = t.found.filter(q => (q.kind === 'water' || q.kind === 'food' || q.kind === 'material') && !q.known);
+    const places = t.found.filter(q => q.kind !== 'water' && q.kind !== 'food' && q.kind !== 'material' && q.kind !== 'clue' && !q.known);
     const err = rumorError(per);
     let lines: string[] = [];
     for (const q of res) g.know(q, p, false);
