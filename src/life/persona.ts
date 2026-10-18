@@ -130,3 +130,20 @@ export const SKILL_LABEL: Record<Skill, string> = {
 export const SECRET_LABEL: Record<Secret, string> = {
   hoarder: 'Hoards food', fakeJob: 'Lied about their job', hiddenFear: 'Hides a fear', knowsSomeone: 'Knew someone on the flight', runaway: 'Running from something',
 };
+
+export const BABY_NAMES = ['Ocean', 'River', 'Coral', 'Rain', 'Sky', 'Isla', 'Marina', 'Reef', 'Sunny', 'Storm', 'Hope', 'Pearl', 'Cove', 'Wren', 'Ash', 'Lark'];
+
+/** A baby born on the island: something of each parent, and something all their own. */
+export function makeChild(id: number, a: Persona, b: Persona, day: number, rnd = Math.random): Persona {
+  const pick = <T,>(x: readonly T[]) => x[(rnd() * x.length) | 0];
+  const traits: Trait[] = [];
+  const clash = (t: Trait) => traits.some(x => AXES.some(ax => ax.length > 1 && ax.includes(x) && ax.includes(t)));
+  for (const t of [pick(a.traits), pick(b.traits)]) if (t && !traits.includes(t) && !clash(t)) traits.push(t);
+  while (traits.length < 2) { const t = pick(pick(AXES)); if (!traits.includes(t) && !clash(t)) traits.push(t); }
+  const hairOf = (p: Persona) => p.look.hair === '#d8d8d8' ? pick(HAIR.slice(0, 5)) : p.look.hair;
+  const look: Look = { skin: pick([a, b]).look.skin, hair: hairOf(pick([a, b])), style: pick(STYLES), shirt: pick(SHIRT), pants: pick(PANTS), cap: pick(SHIRT) };
+  return {
+    id, name: 'Baby', age: 'teen', look, backstory: `Born on the island on day ${day}`, skill: 'none', traits,
+    strength: pick(STRENGTHS), weakness: pick(WEAKNESSES), secret: null, secretWith: -1, pair: -1, pairKind: null, trust: 70, voice: 1.3 + rnd() * 0.3,
+  };
+}

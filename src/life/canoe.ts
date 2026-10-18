@@ -53,6 +53,11 @@ export class Canoe {
   }
 
   get boat(): Building | null { return this.g.camp.get('canoe'); }
+  /** One of them is on an islet (or at sea) and the other isn't: no walking between them. */
+  apart(a: { x: number; z: number }, b: { x: number; z: number }) {
+    const g = this.g, ca = g.grid.cell(a.x, a.z), cb = g.grid.cell(b.x, b.z);
+    return ca >= 0 && cb >= 0 && !!this.main[ca] !== !!this.main[cb];
+  }
   riding(p: Person) { return !!this.trip && this.trip.phase === 'paddle' && this.trip.riders.includes(p); }
   private grid() { return (this.water ??= new WalkGrid(this.g.w, true)); }
   /** Can you walk from where you stand to there? */

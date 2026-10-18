@@ -15,6 +15,8 @@ export class Health {
   dead: { name: string; cause: string; day: number }[] = [];
   funeral: { ps: Person[]; grave: Building; t: number; started: boolean } | null = null;
   thirsty = false;
+  /** dry nights in a row: the first one only hurts */
+  dryN = 0;
 
   constructor(private g: Group) {}
 
@@ -41,6 +43,7 @@ export class Health {
   /** At dawn: what yesterday did to everyone. */
   dawn() {
     const g = this.g, C = g.camp, alive = g.people.filter(p => p.mode !== 'dead');
+    this.dryN = this.thirsty ? this.dryN + 1 : 0;
     const sick = alive.filter(p => p.health >= 2 && p.mode === 'camp').length;
     const tended = g.people.some(o => o.job === 'tend' && o.mode === 'camp');
     const medic = g.people.find(o => o.per.skill === 'medic' && o.mode === 'camp' && o.health < 2);
@@ -57,7 +60,7 @@ export class Health {
       p.hungerN = p.hungry ? p.hungerN + 1 : 0;
       let worse = '';
       if (p.hungerN >= 2) worse = 'hunger';
-      else if (this.thirsty && Math.random() < 0.35) worse = 'no clean water';
+      else if (this.thirsty && this.dryN >= 2 && Math.random() < 0.35) worse = 'no clean water';
       else if (g.stats.spoiled > 3 && !C.has('storage') && Math.random() < 0.06) worse = 'bad food';
       else if (p.hurt && !C.has('sickbay') && !medic && Math.random() < (g.ideas.done('herbs') && g.stock.herbs > 0 ? 0.09 : 0.18)) worse = 'an infected wound';
       else if (p.health < 2 && sick && Math.random() < 0.04 * sick * (C.has('bath') ? 0.5 : 1)) worse = 'caught it from the others';
@@ -78,7 +81,8 @@ export class Health {
     if (g.requests.cur?.p === p) g.requests.cur = null;
     g.scouting.trips = g.scouting.trips.filter(t => t.p !== p);
     for (const m of g.disc.markers.filter(m => m.who === p)) g.disc.removeMarker(m);
-    p.mode = 'dead'; p.ask = false; p.act = ''; p.path = []; p.hurt = false; p.torch = false; p.carry = 0;
+    p.mode = 'dead'; p.ask = false; p.act = ''; p.path = []; p.hurt = false; p.torch = false; p.carry = 0; p.up = 0;
+    if (p === g.leader) g.politics.succeed(p);
     this.dead.push({ name: N, cause, day: g.clock.day });
     for (const h of g.camp.list) if (h.owners.includes(p.id)) h.owners = h.owners.filter(i => i !== p.id);
     // whoever was closest keeps what they carried from home
@@ -95,6 +99,7 @@ export class Health {
     g.onSting(false);
     for (const o of g.people) if (o.mode !== 'dead') { const r = S.rel(o, p); if (r > 30 || o.per.pair === p.id) { S.mood(o, 'sad', 1400); S.say(o, pickOf([`No... ${N}...`, `${N}!`, 'This can\'t be happening.'])); } }
     S.trustAll(neglect ? -6 : -2, g.leader);
+    if (neglect) g.politics.blame = g.clock.day;
     // everyone who died before dusk is buried together
     if (this.funeral && !this.funeral.started) this.funeral.ps.push(p);
     else this.funeral = { ps: [p], grave: gr, t: 0, started: false };

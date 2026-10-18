@@ -72,7 +72,9 @@ export class Camp {
   /** Queue something to build. The camp picks the spot. */
   add(kind: BKind, front = false) {
     if (!BUILD[kind].many && (this.has(kind) || this.planned(kind))) return null;
-    const s = this.site(kind); if (!s) return null;
+    // the preferred spot is taken: somewhere sensible further out instead
+    const F = this.g.fire, s = this.site(kind) ?? (BUILD[kind].flat || kind === 'canoe' || kind === 'tower' ? null : this.ring(F.x, F.z, 10, 30, 1.6, this.seaAngle() + Math.PI));
+    if (!s) return null;
     const b: Building = { id: this.nid++, kind, x: s.x, z: s.z, progress: 0, paid: 0, owners: [], shaky: false, skilled: false };
     if (kind === 'fence') b.posts = this.fencePosts();
     if (kind === 'traps') b.posts = this.pits(s);
@@ -125,7 +127,7 @@ export class Camp {
     b.shaky = !b.skilled && (b.doubt || Math.random() < 0.35) && b.kind !== 'sos' && b.kind !== 'bath';
     if (b.kind === 'hut') this.ownHut(b);
     // nobody wants to sleep in the sand: while people are without a roof, the next hut gets started by itself
-    if (b.kind === 'hut' && !this.planned('hut') && g.people.filter(p => p.mode !== 'dead' && !this.hutOf(p.id)).length > 2 && this.add('hut')) g.story.log('Another hut, then. Nobody wants to sleep in the sand.');
+    if (b.kind === 'hut' && !this.planned('hut') && g.people.filter(p => p.mode !== 'dead' && !p.kid && !this.hutOf(p.id)).length > 0 && this.add('hut')) g.story.log('Another hut, then. Nobody wants to sleep in the sand.');
     for (let i = 0; i < 12; i++) g.fx.emit('puff', b.x + (Math.random() - 0.5) * 3, g.bodies.ground(b) + 0.3, b.z + (Math.random() - 0.5) * 3, { vy: 1 + Math.random(), max: 1.2, r: 0.85, g: 0.8, b: 0.7, a: 0.7 });
     g.stats.built.push(BUILD[b.kind].label);
     if (quiet) { g.onChime(false); return; }
@@ -148,7 +150,8 @@ export class Camp {
       b.owners = [a.id];
     }
     const a = g.people[b.owners[0]];
-    const mate = a.per.pair >= 0 && !housed.has(a.per.pair) ? g.people[a.per.pair]
+    const mid = a.couple >= 0 ? a.couple : a.per.pair;
+    const mate = mid >= 0 && !housed.has(mid) ? g.people[mid]
       : free.filter(p => p !== a && !b.owners.includes(p.id) && S.rel(a, p) > 0).sort((x, y) => S.rel(a, y) - S.rel(a, x))[0];
     if (mate && mate !== a) b.owners.push(mate.id);
   }
@@ -157,8 +160,8 @@ export class Camp {
   wanted(): [BKind, string, string][] {
     const g = this.g, w: [BKind, string, string][] = [];
     if (g.era === 'crash') return w;
-    const homeless = g.people.filter(p => p.mode !== 'dead' && !this.hutOf(p.id)).length - 2 * this.queue.filter(b => b.kind === 'hut').length;
-    if (homeless > 2) w.push(['hut', "We need roofs. Let's get a hut up.", 'builder']);
+    const homeless = g.people.filter(p => p.mode !== 'dead' && !p.kid && !this.hutOf(p.id)).length - 2 * this.queue.filter(b => b.kind === 'hut').length;
+    if (homeless > 0) w.push(['hut', "We need roofs. Let's get a hut up.", 'builder']);
     if (!this.has('storage') && g.stats.spoiled > 2) w.push(['storage', 'The food is rotting. We need a storage hut.', 'cook']);
     if (!this.has('cooking')) w.push(['cooking', 'A proper cooking spot. Hot meals, finally.', 'cook']);
     if (!this.has('workbench')) w.push(['workbench', 'A workbench. Then we can start making tools.', 'mechanic']);

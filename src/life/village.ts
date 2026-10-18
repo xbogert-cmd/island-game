@@ -45,7 +45,7 @@ export class Village {
   ready() {
     const g = this.g, n = g.people.filter(p => p.mode !== 'dead').length;
     const roofless = g.people.filter(p => p.mode !== 'dead' && !p.kid && !g.camp.hutOf(p.id)).length;
-    const catOk = g.cat.phase !== 'stalk' || (g.camp.has('fence') && g.camp.has('watchFire'));
+    const catOk = g.cat.phase !== 'stalk' || g.camp.has('fence') || g.camp.has('watchFire');
     return roofless === 0 && g.stock.totalFood >= n * 0.6 && !g.people.some(p => p.health >= 3 && p.mode !== 'dead') && catOk;
   }
 
@@ -148,7 +148,7 @@ export class Village {
     const g = this.g, e = this.ev;
     if (!e) { p.act = ''; p.actT = 1; return; }
     if (p.path.length) { g.bodies.advance(p, g.bodies.speed(p) * 1.15, dt); p.pose = 'walk'; return; }
-    if (!p.poseO) p.pose = e.kind === 'founding' || e.kind === 'feast' ? 'idle' : 'idle';
+    if (!p.poseO) p.pose = e.kind === 'mourn' ? 'slump' : 'idle';
     g.bodies.faceToward(p, e.at.x, e.at.z);
   }
 

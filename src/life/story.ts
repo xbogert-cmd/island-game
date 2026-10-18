@@ -1,5 +1,5 @@
 import { Clock } from '../sim/clock';
-import { Person } from './people';
+import { MAXP, Person } from './people';
 import { SKILL_LABEL, Skill, has } from './persona';
 
 export interface Bubble { p: Person; text: string; t: number; max: number }
@@ -13,12 +13,25 @@ export class Story {
   journal: Entry[] = [];
   toasts: Toast[] = [];
   bubbles: Bubble[] = [];
+  /** what's been said lately (the parrot listens) */
+  heard: string[] = [];
   skillKnown = new Set<number>();
   secretKnown = new Set<number>();
   onSay: (p: Person, text: string) => void = () => {};
   private n: number;
 
-  constructor(public people: Person[], public relM: Float32Array, private clock: Clock) { this.n = people.length; }
+  constructor(public people: Person[], rel: Float32Array, private clock: Clock) {
+    // one row per possible person, so people born later have room
+    const n = people.length; this.n = MAXP; this.relM = new Float32Array(MAXP * MAXP);
+    for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) this.relM[a * MAXP + b] = rel[a * n + b];
+  }
+  relM: Float32Array;
+  /** an old save stored a smaller table */
+  loadRel(a: number[]) {
+    const n = Math.round(Math.sqrt(a.length));
+    if (n === MAXP) { this.relM.set(a); return; }
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) this.relM[i * MAXP + j] = a[i * n + j];
+  }
 
   rel(a: Person, b: Person) { return this.relM[a.id * this.n + b.id]; }
   addRel(a: Person, b: Person, d: number) {
@@ -36,6 +49,7 @@ export class Story {
   say(p: Person, text: string, max = 3.4) {
     this.bubbles = this.bubbles.filter(b => b.p !== p);
     this.bubbles.push({ p, text, t: 0, max });
+    if (p.per.name !== 'the parrot') { this.heard.push(text); if (this.heard.length > 80) this.heard.shift(); }
     this.onSay(p, text);
   }
   log(text: string) { this.journal.push({ day: this.clock.day, time: this.clock.label, text }); }

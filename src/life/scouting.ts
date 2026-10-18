@@ -35,6 +35,7 @@ export class Scouting {
   /** Will they go? Returns a refusal line, or null. */
   refusal(p: Person): string | null {
     const t = p.per.trust, night = this.g.clock.night > 0.5;
+    if (p.kid) return "I'm not allowed that far!";
     if (p.hurt) return "I can't, not like this.";
     if (t < 25) return 'Go yourself.';
     if (night && p.per.weakness === 'afraid of the dark' && t < 75) return 'Out there? In the dark? No.';

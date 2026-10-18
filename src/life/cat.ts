@@ -159,6 +159,8 @@ export class Cat {
 
   // ------------------------------------------------------------------ the hunt (yours)
 
+  /** Something scared it off (the camp dog). */
+  scare() { this.fleeT = 8; }
   canHunt() { return this.phase === 'stalk' && !this.hunting && this.g.stock.tools.spear >= 2; }
   startHunt() {
     const g = this.g;

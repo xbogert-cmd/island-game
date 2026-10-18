@@ -33,7 +33,7 @@ User decisions (2026-10-18):
   - everyone has a roof;
   - food is not Low or Out at dawn;
   - nobody is very sick;
-  - the cat is not stalking (it's dead or hasn't shown up).
+  - the cat is not a threat (it's dead, hasn't shown up, or there's a fence or watch fire).
 - When it's ready, someone well-liked comes to you: *"We're not a camp anymore. We're a village. Let's make it official tonight."* You answer **TONIGHT** or **NOT YET**. Not answering counts as tonight.
 - **Naming ceremony** at dusk:
   - Everyone gathers round the fire.

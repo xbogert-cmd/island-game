@@ -119,6 +119,11 @@ const big = (rows: string[], k: number) => rows.flatMap(r => Array(k).fill(r.spl
 
 const DEFS: Record<string, { frames: string[][]; outline?: boolean }> = {
   crab: { frames: [['r.r.r.r', '.rrRrr.', 'rrrrrrr', '.l.l.l.'], ['r.r.r.r', '.rrRrr.', 'rrrrrrr', 'l.l.l.l']] },
+  dog: { frames: [['.......NN.', 'N.....nnen', '.Nnnnnnnn.', '.nnnnnnn..', '.n.n..n.n.', '.n.n..n.n.'], ['.......NN.', '.N....nnen', '..nnnnnnn.', '.nnnnnnn..', 'n..n.n..n.', 'n...n...n.']] },
+  dogSit: { frames: [['......NN.', '.....nnen', 'N...nnnn.', '.Nnnnnnn.', '.nnnnnnn.', 'nn.n..nn.']] },
+  goat: { frames: [['......GG.', '.....wwwe', 'wwwwwwwW.', 'Wwwwwwww.', '.N.N.N.N.', '.N.N.N.N.'], ['......GG.', '.....wwwe', 'wwwwwwwW.', 'Wwwwwwww.', 'N..N.N..N', 'N...N...N']] },
+  chicken: { frames: [['...r.', '..wwo', 'wwww.', '.www.', '..y..'], ['...r.', '..wwo', 'wwww.', '.www.', '.y.y.']] },
+  pet: { frames: [['.vv..', '.vey.', 'vvr..', 'vrr..', '.r...', '.r...'], ['.vv..', '.vey.', 'vvr..', 'vVr..', '.V...', '.r...']] },
   gullFly: { frames: [['ww.....ww', '.ww...ww.', '..wwwwwo.', '....W....'], ['.........', '..wwwwwo.', '.ww...ww.', 'ww.....ww']] },
   gullSit: { frames: [['..ww.', '.wwwo', 'Wwww.', '.ww..', '.o.o.']] },
   turtle: { frames: [['..vvvvv..', '.vVvVvVv.', 'tvvvvvvv.', '.t.....t.'], ['..vvvvv..', '.vVvVvVv.', 'tvvvvvvv.', 't.......t']] },

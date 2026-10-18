@@ -111,7 +111,7 @@ export class Requests {
     if (r) {
       r.t += dt;
       const p = r.p, far = Math.hypot(p.x - L.x, p.z - L.z);
-      const gone = p.mode === 'scout' || p.mode === 'lost' || p.mode === 'hurt' || p.hurt || (p.mode === 'camp' && p.act !== 'ask');
+      const gone = p.mode === 'scout' || p.mode === 'lost' || p.mode === 'hurt' || p.hurt || (p.mode === 'camp' && p.act !== 'ask') || g.canoe.apart(p, L);
       if (gone || h >= 20.5) { this.close(); return; }
       if (r.t > (r.arrived ? 75 : 110) || far > 100) { this.close(); g.story.say(p, 'Never mind.'); r.ignore(); return; }
     } else if (this.pending.length && h > 7 && h < 19.5 && !g.goals.opts.length) {
@@ -181,7 +181,7 @@ export class Requests {
 
   /** Free to come and talk: awake, well, not busy with something else. */
   private free(p: Person, L: Person) {
-    return p !== L && !p.hurt && p.health < 2 && p.act !== 'funeral' && p.act !== 'gather' && p.act !== 'haul' && p.pose !== 'sleep' && !this.busy(p) && !p.kid &&
+    return p !== L && !p.hurt && p.health < 2 && !this.g.canoe.apart(p, L) && p.act !== 'funeral' && p.act !== 'gather' && p.act !== 'haul' && p.pose !== 'sleep' && !this.busy(p) && !p.kid &&
       (p.mode === 'follow' || p.mode === 'wait' || (p.mode === 'camp' && Math.hypot(p.x - L.x, p.z - L.z) < 70 && p.act !== 'huddle'));
   }
   private open(r: Req) {

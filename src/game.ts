@@ -306,6 +306,11 @@ export class Game {
       const o = g.people[h.owners[0]], c = o.per.look.shirt, gy = heightAt(w, h.x, h.z);
       b.push(h.x, gy + 2.75, h.z, ATLAS.flag[Math.floor(tt * 2 + h.id) % 2], false, parseInt(c.slice(1, 3), 16) / 255, parseInt(c.slice(3, 5), 16) / 255, parseInt(c.slice(5, 7), 16) / 255, 1);
     }
+    // the camp's animals
+    const A = g.animals, d = A.dog;
+    if (d.phase !== 'none' && d.x >= 0 && near(d.x, d.z)) b.push(d.x, heightAt(w, d.x, d.z) - 0.05, d.z, d.moving ? ATLAS.dog[Math.floor(tt * 8) % 2] : ATLAS.dogSit[0], d.face < 0);
+    for (const [list, spr] of [[A.goats, 'goat'], [A.chickens, 'chicken']] as const) for (const a of list) if (near(a.x, a.z)) b.push(a.x, heightAt(w, a.x, a.z) - 0.05, a.z, ATLAS[spr][a.moving ? Math.floor(tt * 6) % 2 : 0], a.face < 0);
+    if (A.parrot && near(A.parrot.x, A.parrot.z)) { const P = A.parrot, gy = heightAt(w, P.x, P.z); b.push(P.x, gy - 0.05, P.z, ATLAS.fencePost[0]); b.push(P.x, gy + 12 * yUp, P.z, ATLAS.pet[Math.floor(tt * 1.5) % 2]); }
     if (C.phase === 'dead' && g.leader) {
       const h = g.camp.hutOf(g.leader.id), at = h ? { x: h.x + rr.x * 2.6, z: h.z + rr.z * 2.6 } : { x: g.fire.x + 4, z: g.fire.z - 4 };
       if (near(at.x, at.z)) b.push(at.x, heightAt(w, at.x, at.z) - 0.05, at.z, ATLAS.catHide[0]);

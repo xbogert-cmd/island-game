@@ -33,7 +33,7 @@ export function save(game: Game) {
     people: g.people.map(p => ({
       x: p.x, z: p.z, mode: p.mode, face: p.face, trust: p.per.trust, weakness: p.per.weakness, hurt: p.hurt, heal: p.heal, hungry: p.hungry,
       xp: p.xp, pin: p.pin, sleepIn: p.sleepIn, savedBy: p.savedBy, apart: p.apart, hateT: p.hateT, health: p.health, hungerN: p.hungerN,
-      crew: p.crew, outAt: p.outAt, tripAt: p.tripAt, tiredN: p.tiredN, haul: p.haul, keeps: p.keeps,
+      crew: p.crew, outAt: p.outAt, tripAt: p.tripAt, tiredN: p.tiredN, haul: p.haul, keeps: p.keeps, kid: p.kid, born: p.born, couple: p.couple, name: p.per.name, age: p.per.age,
       troubleT: g.scouting.tripOf(p)?.troubleT ?? 0,
     })),
     rel: Array.from(g.story.relM), journal: g.story.journal, skillKnown: [...g.story.skillKnown], secretKnown: [...g.story.secretKnown],
@@ -45,6 +45,10 @@ export function save(game: Game) {
     ideas: { s: g.ideas.s, seen: g.ideas.seen, tended: g.ideas.tended, gardenDays: g.ideas.gardenDays, harvests: g.ideas.harvests },
     village: (({ name, founded, settled, state, stormIn, warned, prepared, storming, rumble }) => ({ name, founded, settled, state: state === 'tonight' ? 'tonight' : state === 'asked' ? 'none' : state, stormIn, warned, prepared, storming, rumble }))(g.village),
     looted: g.disc.pois.filter(q => q.loot === '').map(q => q.id), herbs: g.stock.herbs, wounded: g.cat.wounded,
+    born: g.people.slice(g.crashN).map(p => p.per),
+    families: { expecting: g.families.expecting, lastBirth: g.families.lastBirth, parents: g.families.parents },
+    dryN: g.health.dryN, animals: g.animals.state(), traditions: { list: g.traditions.list, asked: g.traditions.asked },
+    politics: { low: g.politics.low, last: g.politics.last, blame: g.politics.blame, pending: g.politics.pending },
     cat: { phase: g.cat.phase, name: g.cat.name, signs: g.cat.signs, bold: g.cat.bold, hunting: g.cat.hunting, nights: (g.cat as Any).campNights },
     wear: b64(Uint8Array.from(g.bodies.wear, v => Math.min(255, v))),
     camp: { list: g.camp.list, queue: g.camp.queue.map(b => b.id), nid: (g.camp as Any).nid },
@@ -59,11 +63,14 @@ export function save(game: Game) {
 export function load(game: Game): boolean {
   let s: Any;
   try { s = JSON.parse(localStorage.getItem(KEY(game.world.seed)) ?? 'null'); } catch { return false; }
-  if (!s || s.v !== 1 || s.people.length !== game.group.people.length) return false;
+  if (!s || s.v !== 1) return false;
   const g: Group = game.group, P = g.people;
+  // people born on the island come back first, so everyone lines up
+  for (const per of (s.born ?? []).sort((a: Any, b: Any) => a.id - b.id)) if (per.id === P.length) g.addPerson(per, g.fire.x, g.fire.z, (s.families?.parents?.[per.id] ?? []).map((i: number) => P[i]));
+  if (s.people.length !== P.length) return false;
   game.clock.minutes = s.minutes;
   g.era = s.era; (g as Any).day = s.gday; g.lastFind = s.lastFind; g.firstAid = s.firstAid; (g as Any).mealDay = s.mealDay; g.recap = s.recap ?? ''; g.stats = s.stats ?? g.stats;
-  g.story.relM.set(s.rel); g.story.journal = s.journal;
+  g.story.loadRel(s.rel); g.story.journal = s.journal;
   g.story.skillKnown = new Set(s.skillKnown); g.story.secretKnown = new Set(s.secretKnown);
   s.pois.forEach((v: [number, string | null], i: number) => { const q = g.disc.pois[i]; if (q) { q.known = !!v[0]; q.name = v[1]; } });
   unb64(s.explored, g.disc.explored); g.disc.exploredVer++;
@@ -85,6 +92,7 @@ export function load(game: Game): boolean {
     const p = P[i];
     Object.assign(p, { x: d.x, z: d.z, face: d.face, hurt: d.hurt, heal: d.heal, hungry: d.hungry, xp: d.xp, pin: d.pin, sleepIn: d.sleepIn, savedBy: d.savedBy, apart: d.apart, hateT: d.hateT, health: d.health ?? 0, hungerN: d.hungerN ?? 0 });
     if (d.keeps) Object.assign(p, { crew: d.crew, outAt: d.outAt, tripAt: d.tripAt, tiredN: d.tiredN, haul: d.haul, keeps: d.keeps });
+    if (d.born !== undefined) { Object.assign(p, { kid: d.kid, born: d.born, couple: d.couple }); p.per.name = d.name; p.per.age = d.age; }
     p.per.trust = d.trust; p.per.weakness = d.weakness;
     let mode: Mode = d.mode;
     if (mode === 'scout') { mode = 'camp'; const q = g.grid.nearest(g.fire.x + Math.random() * 6 - 3, g.fire.z + Math.random() * 6 - 3); if (q) { p.x = q.x; p.z = q.z; } }
@@ -105,6 +113,12 @@ export function load(game: Game): boolean {
   if (s.village) { Object.assign(g.village, s.village); if (g.village.storming) g.weather.forced = 'storm'; }
   for (const id of s.looted ?? []) if (g.disc.pois[id]) g.disc.pois[id].loot = '';
   g.stock.herbs = s.herbs ?? 0; g.cat.wounded = s.wounded ?? 0;
+  if (s.families) Object.assign(g.families, s.families);
+  if (s.animals) g.animals.restore(s.animals);
+  // an idea that was asked but never answered gets asked again
+  if (s.traditions) { g.traditions.list = s.traditions.list; g.traditions.asked = s.traditions.asked.filter((k: string) => s.traditions.list.some((t: Any) => t.kind === k)); }
+  if (s.politics) Object.assign(g.politics, s.politics);
+  g.health.dryN = s.dryN ?? 0;
   // nobody wakes up at sea
   for (const p of P) if (p.mode !== 'dead' && !g.grid.walkable(p.x, p.z)) { const q = g.grid.nearest(p.x, p.z); if (q) { p.x = q.x; p.z = q.z; } }
   g.crew.out = g.crew.outside(g.leader.x, g.leader.z);

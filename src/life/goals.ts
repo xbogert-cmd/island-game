@@ -68,7 +68,7 @@ export class Goals {
 
   private offer(): boolean {
     const g = this.g, S = g.story, L = g.leader!, R = g.requests;
-    const pool = g.people.filter(p => p !== L && !p.hurt && p.health < 2 && (p.mode === 'camp' || p.mode === 'follow' || p.mode === 'wait'));
+    const pool = g.people.filter(p => p !== L && !p.kid && !p.hurt && p.health < 2 && (p.mode === 'camp' || p.mode === 'follow' || p.mode === 'wait'));
     if (pool.length < 3) return false;
     const used = new Set<Person>();
     const pitcher = (likes: Trait[], skill?: string, not: Person[] = []) => {

@@ -7,6 +7,8 @@ import { WalkGrid } from './path';
 import { Particles } from './particles';
 
 export const SW = 20, SH = 26, FEET = 24;
+/** Room for everyone who could ever live here, babies included. */
+export const MAXP = 48;
 const shade = (h: string, f: number) => { const c = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) * f | 0); return `rgb(${c[0]},${c[1]},${c[2]})`; };
 
 export type Pose = 'idle' | 'walk' | 'run' | 'limp' | 'sit' | 'sleep' | 'cover' | 'search' | 'collect' | 'point' | 'wave' | 'whistle' | 'cheer' | 'argue' | 'slump' | 'startle' | 'fish' | 'eat' | 'build';
@@ -47,6 +49,10 @@ export interface Person {
   up: number;
   /** still a child (born on the island) */
   kid: boolean;
+  /** day they were born on the island (-1: came on the plane) */
+  born: number;
+  /** who they're with (-1: nobody) */
+  couple: number;
   step: number;
 }
 
@@ -55,8 +61,28 @@ const FRAME_RATE: Partial<Record<Pose, number>> = { walk: 9, run: 13, limp: 6, w
 
 type Arm = 'down' | 'fwd' | 'up' | 'out' | 'mouth' | 'torch' | 'bucket' | 'carry' | 'log' | 'reach' | 'fist' | 'rod' | 'hamUp' | 'hamDown' | 'food';
 
+/** A child: smaller everything. A baby is a bundle in someone's arms. */
+function kidRects(p: Person, baby: boolean) {
+  const R: [number, number, number, number, string][] = [];
+  const f = p.face, L = p.per.look, pose = p.pose, ph = Math.floor(p.anim * (FRAME_RATE[pose] ?? 0)) % 4;
+  const r = (dx: number, dy: number, w: number, h: number, c: string) => R.push([f < 0 ? -dx - w + 1 : dx, dy, w, h, c]);
+  const eye = '#1a1420', shoe = '#2a2018';
+  if (baby) { r(-2, -5, 5, 4, '#ece6d4'); r(-2, -2, 5, 1, '#c8c0a8'); r(-1, -7, 3, 3, L.skin); r(0, -6, 1, 1, eye); r(-1, -7, 3, 1, L.hair); return R; }
+  if (pose === 'sleep') { r(0, -2, 4, 2, L.pants); r(-3, -3, 4, 2, L.shirt); r(-6, -4, 3, 3, L.skin); r(-6, -4, 1, 3, L.hair); return R; }
+  const walk = pose === 'walk' || pose === 'run', sit = pose === 'sit' || pose === 'eat';
+  const t = sit ? 2 : walk && ph % 2 ? -1 : 0;
+  if (sit) { r(-1, -1, 4, 1, L.pants); } else { r(-1, -2 + (walk && ph === 1 ? 1 : 0), 1, 2, L.pants); r(1, -2 + (walk && ph === 3 ? 1 : 0), 1, 2, L.pants); r(-1, -1, 1, 1, shoe); r(1, -1, 1, 1, shoe); }
+  r(-1, -5 + t, 4, 3, L.shirt);
+  const up = pose === 'cheer' || pose === 'wave';
+  if (up) { r(-2, -8 + t, 1, 3, L.shirt); r(3, -8 + t, 1, 3, L.shirt); } else { r(-2, -5 + t, 1, 2, L.shirt); r(3, -5 + t, 1, 2, L.shirt); r(3, -3 + t, 1, 1, L.skin); }
+  r(-1, -9 + t, 4, 4, L.skin); r(1, -7 + t, 1, 1, eye); r(2, -7 + t, 1, 1, eye);
+  r(-1, -9 + t, 4, 1, L.hair); r(-1, -8 + t, 1, 2, L.hair);
+  return R;
+}
+
 /** Pixel rectangles for one survivor frame, built facing right then mirrored. */
 export function personRects(p: Person) {
+  if (p.kid) return kidRects(p, p.up > 0.5);
   const R: [number, number, number, number, string][] = [];
   const f = p.face, L = p.per.look, pose = p.pose, ph = Math.floor(p.anim * (FRAME_RATE[pose] ?? 0)) % 4;
   const shirtD = shade(L.shirt, 0.72), shoe = '#2a2018', eye = '#1a1420';
@@ -147,11 +173,10 @@ export class Survivors {
   wear = new Float32Array(192 * 192);
 
   constructor(private w: World, private grid: WalkGrid, pers: Persona[], private fx: Particles) {
-    const n = pers.length;
-    const c = document.createElement('canvas'); c.width = SW * n; c.height = SH;
+    const c = document.createElement('canvas'); c.width = SW * MAXP; c.height = SH;
     this.g = c.getContext('2d')!;
     this.tex = new THREE.CanvasTexture(c); this.tex.magFilter = this.tex.minFilter = THREE.NearestFilter; this.tex.generateMipmaps = false;
-    this.batch = new SpriteBatch(this.tex, n);
+    this.batch = new SpriteBatch(this.tex, MAXP);
     for (let i = 0; i < 4; i++) this.lights.push(new THREE.PointLight(0xffa050, 0, 16, 1.4));
     const cr = w.crash, ax = Math.cos(cr.rot), az = Math.sin(cr.rot);
     for (const per of pers) {
@@ -159,14 +184,21 @@ export class Survivors {
       const i = per.id, side = i % 2 ? 1 : -1, along = -5 + (i >> 1) * 1.6;
       let x = cr.x + ax * along - az * side * (3.4 + (i % 3) * 0.6), z = cr.z + az * along + ax * side * (3.4 + (i % 3) * 0.6);
       if (!grid.walkable(x, z)) { const q = grid.nearest(x, z)!; x = q.x + Math.random() - 0.5; z = q.z + Math.random() - 0.5; }
-      this.people.push({
-        id: i, per, x, z, face: side, pose: 'sleep', anim: Math.random() * 9, key: '', mode: 'asleep',
-        path: [], repath: 0, stuck: 0, moving: false, act: '', actT: Math.random() * 3, ax: x, az: z, partner: null,
-        poseO: null, poseT: 0, torch: false, carry: 0, hurt: false, heal: 0, mood: 'none', tmood: 'none', moodT: 0, why: '', apart: 0, apartHit: false, step: 0, ask: false, bring: '', hungry: false,
-        job: '', wph: '', wT: 0, xp: {}, love: '', hate: '', pin: '', hateT: 0, sleepIn: false, watched: false, savedBy: -1, health: 0, hungerN: 0,
-        crew: false, outAt: -1e9, tripAt: 0, outLike: 0, tiredN: 0, haul: [], keeps: [], up: 0, kid: false,
-      });
+      const p = this.spawn(per, x, z); p.face = side; p.pose = 'sleep'; p.mode = 'asleep';
     }
+  }
+
+  /** A new body in the world (the crash survivors, and later anyone born here). */
+  spawn(per: Persona, x: number, z: number): Person {
+    const p: Person = {
+      id: per.id, per, x, z, face: 1, pose: 'idle', anim: Math.random() * 9, key: '', mode: 'camp',
+      path: [], repath: 0, stuck: 0, moving: false, act: '', actT: Math.random() * 3, ax: x, az: z, partner: null,
+      poseO: null, poseT: 0, torch: false, carry: 0, hurt: false, heal: 0, mood: 'none', tmood: 'none', moodT: 0, why: '', apart: 0, apartHit: false, step: 0, ask: false, bring: '', hungry: false,
+      job: '', wph: '', wT: 0, xp: {}, love: '', hate: '', pin: '', hateT: 0, sleepIn: false, watched: false, savedBy: -1, health: 0, hungerN: 0,
+      crew: false, outAt: -1e9, tripAt: 0, outLike: 0, tiredN: 0, haul: [], keeps: [], up: 0, kid: false, born: -1, couple: -1,
+    };
+    this.people.push(p);
+    return p;
   }
 
   speed(p: Person) {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { makePeople } from './persona';
+import { makeChild, makePeople } from './persona';
+import { Politics } from './politics';
 import { WalkGrid } from './path';
 import { B, N, World, generate } from '../world/island';
 import { rumorError } from './scouting';
@@ -194,5 +195,26 @@ describe('village (4a)', () => {
     const path = W.find(110, 220, 130, 580);
     expect(path.length).toBeGreaterThan(0);
     for (const q of path) expect(W.walkable(q.x, q.z)).toBe(true);
+  });
+});
+
+describe('life goes on (4b)', () => {
+  it('a child takes after both parents', () => {
+    const { people } = makePeople(7), a = people[0], b = people[1];
+    for (let k = 0; k < 20; k++) {
+      const c = makeChild(99, a, b, 30);
+      expect([a.look.skin, b.look.skin]).toContain(c.look.skin);
+      expect(c.traits.length).toBeGreaterThanOrEqual(2);
+      expect(c.traits.some(t => a.traits.includes(t) || b.traits.includes(t))).toBe(true);
+      expect(c.id).toBe(99); expect(c.skill).toBe('none');
+    }
+  });
+  it('in a showdown, trust and your answer decide sides', () => {
+    const kind = { per: { traits: ['kind'] } } as unknown as Person, hot = { per: { traits: ['hothead'] } } as unknown as Person;
+    expect(Politics.side(80, 0, 0, 0)).toBeGreaterThan(0);
+    expect(Politics.side(20, 0, 0, 0)).toBeLessThan(0);
+    expect(Politics.sway(kind, 'admit', 0)).toBeGreaterThan(Politics.sway(kind, 'push', 0));
+    expect(Politics.sway(hot, 'push', 0)).toBeGreaterThan(Politics.sway(hot, 'admit', 0));
+    expect(Politics.sway(kind, 'remind', 20)).toBeGreaterThan(Politics.sway(kind, 'remind', 0));
   });
 });

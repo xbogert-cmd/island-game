@@ -8,6 +8,7 @@ import { Input } from './input';
 import { load, save, saveInfo, stopSaving } from '../life/save';
 import { IDEAS, INFO, IdeaKind } from '../life/ideas';
 import type { Naming } from '../life/village';
+import type { Choice } from '../life/politics';
 import { objectives } from '../life/objectives';
 import { JOB, JOB_KINDS, JobKind, LEVEL_WORD, PRIO_WORD, level } from '../life/jobs';
 import { BUILD } from '../life/buildings';
@@ -374,6 +375,7 @@ export class Social {
     if (this.momentT > 0) { if ((this.momentT -= dt) <= 0) this.title.style.opacity = '0'; } else if (g.moments.length) this.moment();
     else if (g.eraCards.length) { const c = g.eraCards.shift()!; this.title.innerHTML = `${c.title}<span class="sub">${c.sub}</span>`; this.title.style.opacity = '1'; this.momentT = 5; }
     if (!this.naming && g.village.namings.length) this.nameIt(g.village.namings.shift()!);
+    else if (!this.naming && g.politics.choices.length) this.choose(g.politics.choices.shift()!);
     this.drawBubbles();
     this.drawLabels();
     this.drawAsk();
@@ -507,6 +509,20 @@ export class Social {
     return `${ic('bulb')} ${name} <span class="dim">— ${who ? who.per.name + "'s idea" : 'an idea'}, not tried yet</span>`;
   }
 
+  /** A choice in front of everyone. Nobody chooses in time: the first answer. */
+  private choose(c: Choice) {
+    this.naming = true;
+    const el = this.namingEl;
+    el.innerHTML = `<h3></h3><div class="dim" style="font-size:15px"></div><div class="sg"></div>`;
+    (el.querySelector('h3') as HTMLElement).textContent = c.title;
+    (el.querySelector('.dim') as HTMLElement).textContent = c.text;
+    let fin = false;
+    const pick = (i: number) => { if (fin) return; fin = true; this.naming = false; el.classList.remove('open'); c.options[i].fn(); };
+    c.options.forEach((o, i) => { const b = document.createElement('button'); b.textContent = o.label; if (o.cls) b.className = o.cls; b.style.textTransform = 'uppercase'; b.onclick = () => pick(i); el.querySelector('.sg')!.appendChild(b); });
+    el.classList.add('open');
+    setTimeout(() => pick(0), 60000);
+  }
+
   /** A name for something new: suggestions from the camp, or type your own. */
   private nameIt(n: Naming) {
     this.naming = true;
@@ -560,9 +576,26 @@ export class Social {
       ${built.filter(b => b.kind !== 'hut').map(b => `<div class="ln">${cap(BUILD[b.kind].label)}${b.shaky ? ' <span class="b">— shaky</span>' : ''}</div>`).join('')}
       ${up.map(b => `<div class="ln dim">Going up: ${BUILD[b.kind].label}${C.waitingFor(b) ? ` (waiting for ${C.waitingFor(b)})` : ''}</div>`).join('')}
       ${dis.length ? `<h5>DISCOVERIES</h5>${dis.map(k => `<div class="ln">${this.ideaLine(k)}</div>`).join('')}` : ''}
+      ${g.traditions.list.length ? `<h5>TRADITIONS</h5>${g.traditions.list.map(t => `<div class="ln">${ic('flame')} ${esc(t.name)} <span class="dim">— every tenth day</span></div>`).join('')}` : ''}
+      ${this.familyLines()}
       </div></div>`;
     if (html === this.ovKey) return;
     this.ovKey = html; this.overview.innerHTML = html;
+  }
+
+  private familyLines() {
+    const g = this.game.group, F = g.families, A = g.animals, out: string[] = [];
+    const esc = (t: string) => t.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
+    const couples = g.people.filter(p => p.couple > p.id && p.mode !== 'dead' && g.people[p.couple]?.mode !== 'dead').map(p => `${esc(p.per.name)} & ${esc(g.people[p.couple].per.name)}`);
+    if (couples.length) out.push(`${ic('heart')} Couples: ${couples.join(', ')}`);
+    for (const e of F.expecting) out.push(`${ic('baby-carriage')} ${esc(g.people[e.a].per.name)} and ${esc(g.people[e.b].per.name)} are expecting`);
+    const kids = g.people.filter(p => p.kid && p.mode !== 'dead');
+    if (kids.length) out.push(`${ic('mood-kid')} Kids: ${kids.map(p => esc(p.per.name) + (F.baby(p) ? ' (baby)' : '')).join(', ')}`);
+    if (A.dog.phase === 'tame') out.push(`${ic('dog')} ${esc(A.dog.name || 'The dog')}, the camp dog`);
+    if (A.goats.length) out.push(`${ic('fence')} Goats: ${A.goats.length < 3 ? 'a couple' : 'a small herd'}`);
+    if (A.chickens.length) out.push(`${ic('egg')} Chickens in the coop`);
+    if (A.parrot) out.push(`${ic('feather')} ${esc(A.parrot.name || 'A parrot')}, ${esc(g.people[A.parrot.owner].per.name)}'s parrot`);
+    return out.length ? `<h5>FAMILIES AND ANIMALS</h5>${out.map(t => `<div class="ln">${t}</div>`).join('')}` : '';
   }
 
   /** What someone does all day, how good they are at it, what they like. */
