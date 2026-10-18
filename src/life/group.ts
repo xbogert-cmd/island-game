@@ -687,4 +687,4 @@ export class Group {
 const WHY: Record<string, string> = { happy: 'Happy right now', angry: 'Angry', worried: 'Worried', sad: 'Upset', scared: 'Scared', fond: 'Enjoying the company', tired: 'Tired', pain: 'In pain', none: '' };
 
 const KEEPSAKES = ['a photo of their kids', 'a wedding ring', 'a wristwatch, stopped at the crash', 'a paperback with the ending torn out', 'a harmonica', 'a lucky coin',
-  'a postcard they never sent', "a child's drawing", 'a rosary', 'a lighter that still works', 'their boarding pass', 'a cassette tape'];
+  'a postcard they never sent', "a child's drawing", 'a rosary', 'a lighter that still works', 'their boarding pass', 'a cassette tape', 'a deck of cards', 'a sketchbook', 'reading glasses with one lens', 'a seashell necklace', 'a tiny teddy bear'];

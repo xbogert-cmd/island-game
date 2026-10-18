@@ -11,6 +11,9 @@ const KEEP_LINE: Record<string, string> = {
   "a child's drawing": "My kid drew this. It's a plane. Funny, huh.", 'a rosary': '(quietly prays over a rosary)',
   'a lighter that still works': "Still works. Don't tell anyone or they'll all want it.", 'their boarding pass': 'Seat 14C. I keep reading it like it might change.',
   'a cassette tape': 'No player. I just like holding it.',
+  'a deck of cards': 'Anyone for cards? I promise I won\'t cheat this time.', 'a sketchbook': "I've been drawing the island. Want to see?",
+  'reading glasses with one lens': 'Half my world is blurry now. The good half.', 'a seashell necklace': 'Bought this at the airport. Now I live on the beach it came from.',
+  'a tiny teddy bear': "It was my son's. He made me take it for luck.",
 };
 interface Rumor { text: string; from: Person; scary: boolean; told: number; day: number }
 

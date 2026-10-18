@@ -15,110 +15,131 @@ import { mapImage } from './hud';
 import { N } from '../world/island';
 
 const CSS = `
-.so { position: absolute; font-family: 'Press Start 2P', monospace; color: #f4f1e6; z-index: 6; user-select: none; }
-.box { background: #121a33f2; border: 3px solid #2b3766; border-radius: 14px; box-shadow: 0 3px 0 #0007; }
-.so button { font: 9px 'Press Start 2P', monospace; color: #f4f1e6; background: #24305c; border: 3px solid #4a5a9a; border-radius: 10px; padding: 9px 11px; cursor: pointer; }
-.so button:hover { background: #3b4f9a; }
-.so button.go { background: #2f6e33; border-color: #6bc06b; }
-.so button.no { background: #6a2a2a; border-color: #c06060; }
-#lead { left: 14px; bottom: 14px; display: flex; gap: 10px; align-items: flex-end; }
-#lead .me { display: flex; gap: 10px; align-items: center; padding: 8px 12px 8px 8px; cursor: pointer; }
-#lead .me canvas { image-rendering: pixelated; width: 60px; height: 78px; }
-#lead .nm { font-size: 11px; line-height: 1.8; }
-#lead .sub { font-size: 8px; opacity: .8; line-height: 1.8; }
-#lead .party { display: flex; gap: 6px; padding: 6px; align-items: flex-end; min-height: 52px; }
-#lead .party .pp { position: relative; cursor: pointer; text-align: center; font-size: 7px; }
+.so { position: absolute; font-family: var(--tx); color: var(--ink); z-index: 6; user-select: none; }
+.box { background: var(--sl); border-radius: 3px; box-shadow: 0 2px 10px #0005; }
+.so button { font: 500 13px var(--hd); letter-spacing: 1.5px; color: var(--ink); background: var(--sl2); border: 0; border-bottom: 2px solid var(--ln); border-radius: 2px; padding: 8px 12px; cursor: pointer; text-transform: uppercase; }
+.so button:hover { background: var(--sl3); border-bottom-color: var(--dim); }
+.so button:active { transform: translateY(1px); }
+.so button.go { color: var(--gold); border-bottom-color: var(--gold); }
+.so button.no { color: var(--bad); border-bottom-color: var(--bad); }
+.so button.sm { font-size: 11px; padding: 5px 8px; letter-spacing: 1px; }
+.so .x { cursor: pointer; color: var(--dim); font-size: 18px; } .so .x:hover { color: var(--ink); }
+.so b, .so .k { color: var(--gold); font-weight: 500; }
+.so .g { color: var(--ok); } .so .b { color: var(--bad); } .so .dim { color: var(--dim); }
+.alert { color: var(--gold); }
+#lead { left: 14px; bottom: 14px; display: flex; gap: 8px; align-items: stretch; }
+#lead .me { display: flex; gap: 10px; align-items: center; padding: 8px 14px 8px 8px; cursor: pointer; border-left: 3px solid var(--gold); }
+#lead .me canvas { image-rendering: pixelated; width: 54px; height: 70px; }
+#lead .nm { font: 500 17px var(--hd); letter-spacing: 2px; }
+#lead .sub { font-size: 14px; color: var(--dim); line-height: 1.35; }
+#lead .party { display: flex; gap: 6px; padding: 6px 10px; align-items: flex-end; min-height: 52px; }
+#lead .party .pp { position: relative; cursor: pointer; text-align: center; }
 #lead .party canvas { image-rendering: pixelated; width: 30px; height: 39px; display: block; }
-#lead .party .tag { position: absolute; top: -4px; right: -6px; font-size: 10px; }
-#lead .btns { display: flex; flex-direction: column; gap: 6px; }
-#lead .cm { display: flex; flex-direction: column; gap: 4px; }
-#lead .cm button { font-size: 7px; padding: 6px 8px; border-radius: 8px; opacity: .7; }
-#lead .cm button.on { opacity: 1; background: #2f6e33; border-color: #6bc06b; }
-#lead .party .pp.home { opacity: .45; }
-#toasts .t.at { pointer-events: auto; cursor: pointer; }
-#tip { left: 50%; transform: translateX(-50%); bottom: 112px; font-size: 9px; padding: 10px 14px; line-height: 1.7; max-width: 560px; text-align: center; transition: opacity .4s; }
-#toasts { left: 50%; top: 14px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; }
-#toasts .t { font-size: 9px; padding: 9px 14px; line-height: 1.6; max-width: 620px; text-align: center; animation: tin .3s ease-out; }
-#toasts .t.good { border-color: #6bc06b; } #toasts .t.bad { border-color: #d0605a; }
-@keyframes tin { from { transform: translateY(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
-#card { right: 14px; bottom: 50px; width: 440px; padding: 14px; font-size: 8px; line-height: 1.9; display: none; }
-#card.open { display: block; }
-#card .hd { display: flex; gap: 12px; }
+#lead .party .tag { position: absolute; top: -6px; right: -7px; font-size: 14px; }
+#lead .party .pp.home { opacity: .4; }
+#lead .party .emp { font-size: 13px; color: var(--dim); padding: 6px 4px; line-height: 1.35; }
+#lead .cm { display: flex; flex-direction: column; justify-content: center; background: var(--sl); border-radius: 3px; box-shadow: 0 2px 10px #0005; padding: 4px; gap: 2px; }
+#lead .cm button { font-size: 11px; padding: 5px 10px; background: transparent; border-bottom: 2px solid transparent; color: var(--dim); }
+#lead .cm button.on { color: var(--gold); border-bottom-color: var(--gold); background: var(--sl2); }
+#lead .btns { display: flex; flex-direction: column; gap: 6px; justify-content: center; }
+#lead .btns button { background: var(--sl); box-shadow: 0 2px 10px #0005; text-align: left; }
+#tip { left: 50%; transform: translateX(-50%); bottom: 118px; font-size: 15px; padding: 9px 16px; line-height: 1.45; max-width: 560px; text-align: center; transition: opacity .4s; border-bottom: 2px solid var(--gold); }
+#toasts { left: 50%; top: 14px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 5px; align-items: center; pointer-events: none; }
+#toasts .t { font-size: 15px; padding: 7px 14px; line-height: 1.4; max-width: 620px; text-align: center; animation: tin .25s ease-out; border-left: 3px solid var(--dim); }
+#toasts .t.good { border-left-color: var(--ok); } #toasts .t.bad { border-left-color: var(--bad); }
+#toasts .t.at { pointer-events: auto; cursor: pointer; } #toasts .t.at:hover { background: var(--sl3); }
+@keyframes tin { from { transform: translateY(-8px); opacity: 0; } to { transform: none; opacity: 1; } }
+#card { right: 14px; bottom: 50px; width: 440px; padding: 14px 16px; font-size: 15px; line-height: 1.45; display: none; border-left: 3px solid var(--gold); z-index: 9; background: #252826; box-shadow: 0 6px 30px #000a; }
+#card.open { display: block; animation: tin .18s ease-out; }
+#card .hd { display: flex; gap: 14px; }
 #card canvas { image-rendering: pixelated; width: 60px; height: 78px; flex: none; }
-#card h3 { font-size: 12px; margin: 2px 0 4px; font-weight: normal; }
-#card .q { opacity: .85; font-style: italic; }
-#card .row b { color: #ffd65a; font-weight: normal; }
-#card .acts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-#card .x { position: absolute; right: 10px; top: 8px; cursor: pointer; font-size: 12px; }
-.panel { right: 14px; top: 286px; width: 330px; max-height: 55vh; overflow-y: auto; padding: 12px; font-size: 8px; line-height: 1.8; display: none; }
-.panel.open { display: block; }
-.panel h4 { font-size: 10px; margin: 0 0 8px; font-weight: normal; color: #ffd65a; }
-#roster { left: 50%; top: 50%; right: auto; transform: translate(-50%, -50%); width: min(1060px, 94vw); max-height: 82vh; padding: 16px 18px; z-index: 8; }
-#roster .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
-#roster .r { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 2px solid #2b3766; border-radius: 10px; cursor: pointer; line-height: 1.8; }
-#roster .r:hover { background: #24305c; border-color: #ffd65a; }
+#card h3 { font: 500 19px var(--hd); letter-spacing: 1.5px; margin: 0 0 4px; }
+#card h3 span { font: 400 13px var(--tx); color: var(--dim); letter-spacing: 0; }
+#card .q { color: var(--dim); font-style: italic; margin-bottom: 4px; }
+#card .row { padding: 1px 0; }
+#card .acts { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+#card .x { position: absolute; right: 12px; top: 8px; }
+.panel { right: 14px; top: 286px; width: 330px; max-height: 55vh; overflow-y: auto; padding: 12px; font-size: 15px; line-height: 1.45; display: none; }
+.panel.open { display: block; animation: pgin2 .18s ease-out; }
+@keyframes pgin2 { from { opacity: 0; transform: translate(-50%, -48%); } to { opacity: 1; transform: translate(-50%, -50%); } }
+.panel h4 { font: 500 15px var(--hd); letter-spacing: 2.5px; margin: 0 0 10px; color: var(--gold); }
+.panel h4 span { font: 400 14px var(--tx); color: var(--dim); letter-spacing: 0; }
+#roster { left: 50%; top: 50%; right: auto; transform: translate(-50%, -50%); width: min(1080px, 94vw); max-height: 84vh; padding: 18px 22px; z-index: 8; border-left: 3px solid var(--gold); box-shadow: 0 6px 30px #0008; }
+#roster .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 8px; }
+#roster .r { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; background: var(--sl2); border-radius: 2px; border-left: 2px solid transparent; cursor: pointer; line-height: 1.4; font-size: 14px; }
+#roster .r:hover { border-left-color: var(--gold); background: var(--sl3); }
+#roster .r.out { border-left-color: var(--sea); }
 #roster canvas { image-rendering: pixelated; width: 40px; height: 52px; flex: none; }
-#roster .nm { font-size: 10px; } #roster .nm span { font-size: 7px; opacity: .7; }
-#roster .g { color: #8af07a; } #roster .b { color: #ff8a7a; } #roster .k { color: #ffd65a; } #roster .dim { opacity: .7; }
-#roster .x { position: absolute; right: 14px; top: 12px; cursor: pointer; font-size: 12px; }
-#journal { left: 50%; top: 50%; right: auto; transform: translate(-50%, -50%); width: min(820px, 94vw); max-height: 88vh; padding: 16px 18px; z-index: 8; }
-#journal .d { color: #ffd65a; margin-top: 8px; }
+#roster .nm { font: 500 16px var(--hd); letter-spacing: 1.5px; } #roster .nm span { font: 400 13px var(--tx); color: var(--dim); letter-spacing: 0; }
+#roster .ra { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+#roster .ra button { font-size: 11px; padding: 4px 8px; letter-spacing: 1px; background: var(--sl); }
+#roster .ra button.on { color: var(--sea); border-bottom-color: var(--sea); }
+#journal { left: 50%; top: 50%; right: auto; transform: translate(-50%, -50%); width: min(840px, 94vw); max-height: 90vh; padding: 18px 22px; z-index: 8; border-left: 3px solid var(--gold); box-shadow: 0 6px 30px #0008; }
+#journal .d { font: 500 13px var(--hd); letter-spacing: 2px; color: var(--gold); margin-top: 12px; }
 #journal p { margin: 2px 0 6px; }
-#journal .jl { max-height: 64vh; overflow-y: auto; }
-#journal .x, #roster .x { position: absolute; right: 14px; top: 12px; cursor: pointer; font-size: 12px; }
-.tabs { display: flex; gap: 6px; margin-bottom: 10px; }
-.tabs button.on { background: #3b4f9a; border-color: #ffd65a; }
-.tag { color: #1c1626; background: #ffd65a; border-radius: 4px; padding: 1px 3px; font-size: 6px; margin-left: 4px; }
-#roster .jr { display: grid; grid-template-columns: 190px 70px 1fr 160px; gap: 10px; align-items: center; padding: 6px 8px; border-bottom: 2px solid #1b2547; }
-#roster .jr .pr { cursor: pointer; text-align: center; border: 2px solid #4a5a9a; border-radius: 6px; padding: 3px 0; }
-#roster .jr .pr:hover { border-color: #ffd65a; }
-#roster .jr .p2 { color: #ffd65a; } #roster .jr .p0 { opacity: .6; }
+#journal .jl { max-height: 66vh; overflow-y: auto; }
+#journal .x, #roster .x { position: absolute; right: 16px; top: 14px; }
+.tabs { display: flex; gap: 0; margin-bottom: 12px; border-bottom: 1px solid var(--ln); }
+.tabs button { background: transparent; border-bottom: 2px solid transparent; color: var(--dim); margin-bottom: -1px; }
+.tabs button.on { color: var(--gold); border-bottom-color: var(--gold); background: transparent; }
+.tag { color: #1e1a10; background: var(--gold); border-radius: 2px; padding: 0 4px; font: 500 10px var(--hd); letter-spacing: 1px; margin-left: 6px; }
+#roster .jr { display: grid; grid-template-columns: 190px 80px 1fr 160px; gap: 12px; align-items: center; padding: 6px 8px; border-bottom: 1px solid #ffffff12; }
+#roster .jr .pr { cursor: pointer; text-align: center; font: 500 12px var(--hd); letter-spacing: 1px; background: var(--sl2); border-bottom: 2px solid var(--ln); border-radius: 2px; padding: 3px 0; }
+#roster .jr .pr:hover { background: var(--sl3); }
+#roster .jr .p2 { color: var(--gold); border-bottom-color: var(--gold); } #roster .jr .p0 { color: var(--dim); }
 #roster .jr .who { display: flex; gap: 2px; flex-wrap: wrap; } #roster .jr .who canvas { width: 20px; height: 26px; }
-#roster .jr .st { opacity: .85; } #roster .jr .st.bad { color: #ff8a7a; }
-#roster .qr { padding: 5px 8px; cursor: pointer; border-radius: 6px; } #roster .qr:hover { background: #24305c; }
-#roster h5 { font-size: 9px; color: #ffd65a; margin: 14px 0 6px; font-weight: normal; }
-#goal .recap { font-size: 8px; line-height: 1.8; max-width: 640px; text-align: center; background: #121a33e6; border: 2px solid #2b3766; border-radius: 10px; padding: 8px 12px; }
-#title .sub { display: block; font-size: 11px; margin-top: 12px; text-align: center; opacity: .8; }
-#pick { inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: #0b102066; }
-#pick h2 { font-size: 18px; font-weight: normal; text-shadow: 0 3px 0 #000; margin: 0; }
-#pick .cards { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
-#pick .c { width: 230px; padding: 14px; font-size: 8px; line-height: 1.9; cursor: pointer; transition: transform .15s; }
-#pick .c:hover { transform: translateY(-6px); border-color: #ffd65a; }
+#roster .jr .st { color: var(--dim); } #roster .jr .st.bad { color: var(--bad); }
+#roster .qr { padding: 5px 8px; cursor: pointer; border-radius: 2px; } #roster .qr:hover { background: var(--sl3); }
+#roster h5 { font: 500 13px var(--hd); letter-spacing: 2px; color: var(--gold); margin: 16px 0 6px; }
+#goal .recap { font-size: 15px; line-height: 1.45; max-width: 640px; text-align: center; background: var(--sl); border-radius: 3px; padding: 8px 14px; }
+#title .sub { display: block; font: 400 16px var(--tx); letter-spacing: 3px; margin-top: 10px; text-align: center; color: var(--dim); }
+#pick { inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: #0b0d0c88; }
+#pick h2 { font: 500 26px var(--hd); letter-spacing: 4px; text-shadow: 0 2px 8px #000; margin: 0; }
+#pick .lede { font-size: 16px; color: var(--dim); }
+#pick .cards { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+#pick .c { width: 240px; padding: 16px; font-size: 14px; line-height: 1.5; cursor: pointer; transition: transform .15s, border-color .15s; border-left: 3px solid var(--ln); }
+#pick .c:hover { transform: translateY(-4px); border-left-color: var(--gold); }
 #pick .c canvas { image-rendering: pixelated; width: 60px; height: 78px; display: block; margin: 0 auto 8px; }
-#pick .c h3 { font-size: 12px; text-align: center; margin: 0 0 6px; font-weight: normal; }
-#title { left: 50%; top: 26%; transform: translateX(-50%); font-size: 26px; text-shadow: 0 4px 0 #000, 0 0 30px #000; letter-spacing: 3px; pointer-events: none; opacity: 0; transition: opacity 1s; white-space: nowrap; }
-#name { left: 50%; top: calc(26% + 60px); transform: translateX(-50%); padding: 12px 14px; font-size: 9px; display: none; gap: 8px; align-items: center; }
+#pick .c h3 { font: 500 19px var(--hd); letter-spacing: 2px; text-align: center; margin: 0 0 6px; }
+#pick button.go { font-size: 15px; padding: 12px 22px; background: var(--sl); }
+#title { left: 50%; top: 26%; transform: translateX(-50%); font: 500 40px var(--hd); text-shadow: 0 2px 12px #000, 0 0 30px #000; letter-spacing: 8px; pointer-events: none; opacity: 0; transition: opacity 1s; white-space: nowrap; }
+#name { left: 50%; top: calc(26% + 74px); transform: translateX(-50%); padding: 10px 14px; font: 500 13px var(--hd); letter-spacing: 2px; color: var(--gold); display: none; gap: 10px; align-items: center; }
 #name.open { display: flex; }
-#name input { font: 10px 'Press Start 2P', monospace; background: #0b1020; color: #f4f1e6; border: 2px solid #4a5a9a; border-radius: 6px; padding: 7px; width: 200px; }
-.bub { position: absolute; z-index: 4; transform: translate(-50%, -100%); background: #fffbea; color: #1c1626; font: 8px/1.5 'Press Start 2P', monospace; padding: 6px 8px; border: 2px solid #1c1626; border-radius: 8px; max-width: 220px; text-align: center; pointer-events: none; }
-.bub:after { content: ''; position: absolute; left: 50%; bottom: -7px; margin-left: -5px; border: 5px solid transparent; border-top-color: #1c1626; border-bottom: 0; }
-.lbl { position: absolute; z-index: 3; transform: translate(-50%, -100%); font: 8px 'Press Start 2P', monospace; color: #fff; text-shadow: 0 2px 0 #000, 0 0 4px #000; pointer-events: none; white-space: nowrap; }
-.lbl.map { font-size: 9px; background: #121a33cc; border: 2px solid #2b3766; border-radius: 8px; padding: 5px 7px; text-shadow: none; }
-.lbl.map:after { content: ''; position: absolute; left: 50%; bottom: -8px; margin-left: -1px; width: 2px; height: 6px; background: #2b3766; }
-.lbl.rum { color: #ffd65a; font-size: 7px; }
-.ask { position: absolute; z-index: 7; transform: translate(-50%, -100%); background: #fffbea; color: #1c1626; font: 8px/1.7 'Press Start 2P', monospace; padding: 10px 12px; border: 3px solid #1c1626; border-radius: 10px; width: 300px; text-align: center; box-shadow: 0 3px 0 #0006; }
-.ask:after { content: ''; position: absolute; left: 50%; bottom: -9px; margin-left: -7px; border: 7px solid transparent; border-top-color: #1c1626; border-bottom: 0; }
-.ask .who { color: #8a5a20; margin-bottom: 4px; }
-.ask .acts { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
-.ask .x { position: absolute; right: 6px; top: 2px; cursor: pointer; }
-#goal { left: 50%; top: 70px; transform: translateX(-50%); display: none; flex-direction: column; align-items: center; gap: 8px; }
+#name input { font: 16px var(--tx); background: var(--sl2); color: var(--ink); border: 1px solid var(--ln); border-radius: 2px; padding: 6px 8px; width: 220px; }
+.bub { position: absolute; z-index: 4; transform: translate(-50%, -100%); background: #f3efe6; color: #2a2620; font: 500 14px/1.3 var(--tx); padding: 5px 9px; border-radius: 3px; max-width: 230px; text-align: center; pointer-events: none; box-shadow: 0 2px 6px #0006; }
+.bub:after { content: ''; position: absolute; left: 50%; bottom: -6px; margin-left: -6px; border: 6px solid transparent; border-top-color: #f3efe6; border-bottom: 0; }
+.lbl { position: absolute; z-index: 3; transform: translate(-50%, -100%); font: 500 14px var(--tx); color: #fff; text-shadow: 0 1px 2px #000, 0 0 5px #000; pointer-events: none; white-space: nowrap; }
+.lbl.map { font: 500 13px var(--hd); letter-spacing: 1.5px; background: var(--sl); border-radius: 2px; padding: 4px 8px; text-shadow: none; }
+.lbl.map:after { content: ''; position: absolute; left: 50%; bottom: -7px; margin-left: -1px; width: 2px; height: 6px; background: var(--gold); }
+.lbl.rum { color: var(--gold); font-size: 13px; }
+.ask { position: absolute; z-index: 7; transform: translate(-50%, -100%); background: #f3efe6; color: #2a2620; font: 16px/1.4 var(--tx); padding: 12px 14px; border-radius: 3px; border-top: 3px solid var(--gold); width: 320px; text-align: center; box-shadow: 0 4px 16px #0008; }
+.ask:after { content: ''; position: absolute; left: 50%; bottom: -8px; margin-left: -8px; border: 8px solid transparent; border-top-color: #f3efe6; border-bottom: 0; }
+.ask .who { font: 500 13px var(--hd); letter-spacing: 2px; color: #8a6420; margin-bottom: 4px; }
+.ask .acts { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+.ask .x { position: absolute; right: 8px; top: 4px; color: #8a8478; font-size: 16px; }
+#goal { left: 50%; top: 70px; transform: translateX(-50%); display: none; flex-direction: column; align-items: center; gap: 10px; }
 #goal.open { display: flex; }
-#goal h2 { font-size: 11px; font-weight: normal; margin: 0; text-shadow: 0 2px 0 #000; }
+#goal h2 { font: 500 20px var(--hd); letter-spacing: 4px; margin: 0; text-shadow: 0 2px 8px #000; }
 #goal .cards { display: flex; gap: 10px; }
-#goal .c { width: 190px; padding: 10px; font-size: 7px; line-height: 1.8; cursor: pointer; transition: transform .15s; text-align: center; }
-#goal .c:hover { transform: translateY(-4px); border-color: #ffd65a; }
+#goal .c { width: 210px; padding: 12px; font-size: 14px; line-height: 1.4; cursor: pointer; transition: transform .15s; text-align: center; border-top: 3px solid var(--ln); }
+#goal .c:hover { transform: translateY(-4px); border-top-color: var(--gold); }
 #goal .c canvas { image-rendering: pixelated; width: 40px; height: 52px; display: block; margin: 0 auto 4px; }
-#goal .c h3 { font-size: 9px; color: #ffd65a; margin: 0 0 4px; font-weight: normal; }
-#goal .bar { width: 300px; height: 6px; background: #121a33; border: 2px solid #2b3766; border-radius: 4px; overflow: hidden; }
-#goal .bar i { display: block; height: 100%; background: #ffd65a; }
-#today { left: 14px; top: 160px; font-size: 8px; padding: 8px 12px; line-height: 1.9; display: none; max-width: 300px; }
-#today .gh { color: #ffd65a; margin-top: 6px; }
-#today .ob { cursor: default; padding-left: 10px; text-indent: -10px; }
-#today .ob.at { cursor: pointer; } #today .ob.at:hover { color: #ffd65a; }
-#today .ob.done { color: #8af07a; }
+#goal .c h3 { font: 500 15px var(--hd); letter-spacing: 1.5px; color: var(--gold); margin: 0 0 4px; }
+#goal .c .q { font-style: italic; }
+#goal .bar { width: 300px; height: 3px; background: var(--sl); overflow: hidden; }
+#goal .bar i { display: block; height: 100%; background: var(--gold); }
+#today { left: 14px; top: 152px; font-size: 15px; padding: 10px 14px; line-height: 1.45; display: none; max-width: 310px; border-left: 3px solid var(--gold); }
+#today .st { font: 400 13px var(--hd); letter-spacing: 1.5px; color: var(--dim); }
+#today .st b { font-weight: 400; color: var(--ink); }
+#today .gh { font: 500 13px var(--hd); letter-spacing: 2px; color: var(--gold); margin: 8px 0 3px; }
+#today .ob { cursor: default; padding: 1px 0 1px 14px; text-indent: -14px; }
+#today .ob.at { cursor: pointer; } #today .ob.at:hover { color: var(--gold); }
+#today .ob.done { color: var(--ok); }
 `;
 
-const MOOD_TXT: Record<string, string> = { sick: '🤢', none: '', happy: '😊', angry: '😠', worried: '😟', sad: '😢', scared: '😨', tired: '💤', fond: '❤', pain: '🤕' };
+const ic = (n: string, c = '') => `<i class="ti ti-${n}"${c ? ` style="color:${c}"` : ''}></i>`;
+const MOOD_TXT: Record<string, string> = { sick: ic('mood-sick', '#b9c46a'), none: '', happy: ic('mood-smile', 'var(--ok)'), angry: ic('mood-angry', 'var(--bad)'), worried: ic('mood-confuzed', 'var(--gold)'), sad: ic('mood-sad', 'var(--sea)'), scared: ic('mood-nervous', 'var(--bad)'), tired: ic('zzz', 'var(--dim)'), fond: ic('heart', '#e8a0a0'), pain: ic('bandage', 'var(--bad)') };
+const ALERT = ic('alert-circle', 'var(--gold)'), CLOSE = '<div class="x">' + ic('x') + '</div>';
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Everything on screen about people: leader, party strip, cards, roster, journal, toasts, bubbles, first sightings. */
@@ -132,13 +153,13 @@ export class Social {
   private goalEl: HTMLElement; private goalKey = ''; private goalT = 0; private todayEl: HTMLElement;
   private obKeys = new Map<string, string>(); private obDone: { text: string; t: number }[] = [];
   private cardP: Person | null = null; private cardKey = ''; private partyKey = ''; private rosterKey = '';
-  private tipT = 0; private momentT = 0; private refreshT = 0; private journalN = -1;
+  private tipT = 0; private todayKey = ''; private momentT = 0; private refreshT = 0; private journalN = -1;
   private peopleTab: 'roster' | 'jobs' = 'roster'; private islandTab: 'map' | 'journal' = 'map'; private mapBase: ImageData; private mapT = 0;
   private toastQ: { el: HTMLElement; t: number }[] = [];
 
   constructor(private game: Game, private input: Input) {
     const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
-    this.lead = this.el(`<div id="lead" class="so"><div class="me box"><canvas width="${SW}" height="${SH}"></canvas><div><div class="nm"></div><div class="sub"></div></div></div><div class="cm"><button data-m="alone" title="Go out on your own">ALONE</button><button data-m="crew" title="Your picks, filled out by the camp">CREW</button><button data-m="all" title="Everyone who can comes">ALL</button></div><div class="party box"></div><div class="btns"><button data-a="roster">PEOPLE</button><button data-a="journal">ISLAND</button></div></div>`);
+    this.lead = this.el(`<div id="lead" class="so"><div class="me box"><canvas width="${SW}" height="${SH}"></canvas><div><div class="nm"></div><div class="sub"></div></div></div><div class="cm"><button data-m="alone" title="Go out on your own">ALONE</button><button data-m="crew" title="Your picks, filled out by the camp">CREW</button><button data-m="all" title="Everyone who can comes">ALL</button></div><div class="party box"></div><div class="btns"><button data-a="roster"><i class="ti ti-users"></i> PEOPLE</button><button data-a="journal"><i class="ti ti-map"></i> ISLAND</button></div></div>`);
     this.card = this.el('<div id="card" class="so box"></div>');
     this.roster = this.el('<div id="roster" class="so box panel"></div>');
     this.journal = this.el('<div id="journal" class="so box panel"></div>');
@@ -169,10 +190,10 @@ export class Social {
   // ---------------------------------------------------------------- start
   private pickScreen() {
     const g = this.game.group;
-    const pick = this.el('<div id="pick" class="so"><h2>WHO WILL LEAD?</h2><div class="cards"></div><div style="font-size:8px;opacity:.75">The others are waking up. Somebody has to take charge.</div></div>');
+    const pick = this.el('<div id="pick" class="so"><h2>WHO WILL LEAD?</h2><div class="cards"></div><div class="lede">The others are waking up. Somebody has to take charge.</div></div>');
     const info = saveInfo(this.game.world.seed);
     if (info) {
-      const c = this.el(`<button class="go" style="font-size:11px;padding:14px 22px">CONTINUE — DAY ${info.day}, ${info.leader.toUpperCase()} LEADING</button>`);
+      const c = this.el(`<button class="go">CONTINUE — DAY ${info.day}, ${info.leader.toUpperCase()} LEADING</button>`);
       pick.insertBefore(c, pick.firstChild);
       c.onclick = () => { if (load(this.game)) { pick.remove(); this.lead.style.display = 'flex'; } else c.remove(); };
       (pick.querySelector('h2') as HTMLElement).textContent = 'OR START OVER: WHO WILL LEAD?';
@@ -237,14 +258,14 @@ export class Social {
     const secret = per.secret && S.secretKnown.has(p.id) ? SECRET_LABEL[per.secret] : '';
     const rec = g.requests.record.get(p.id);
     const where = { dead: 'Dead', asleep: 'Asleep', camp: 'At camp', leader: 'Leading', follow: 'With you', wait: 'Waiting for you', scout: 'Out scouting', lost: 'Lost!', hurt: 'Hurt, out there!', rescued: 'Coming home with you' }[p.mode];
-    const html = `<div class="x">✕</div><div class="hd"><div class="pc"></div><div style="flex:1">
-      <h3>${per.name} <span style="font-size:8px;opacity:.7">${per.age}${isL ? ' · YOU' : ''}</span></h3>
+    const html = `${CLOSE}<div class="hd"><div class="pc"></div><div style="flex:1">
+      <h3>${per.name} <span>${per.age}${isL ? ' · YOU' : ''}</span></h3>
       <div class="q">"${per.backstory}"</div>
       ${pair ? `<div>Arrived with ${pair.per.name} (${per.pairKind === 'parent' ? 'family' : per.pairKind})</div>` : ''}
       <div class="row"><b>Traits</b> ${per.traits.map(cap).join(' · ')}</div>
       <div class="row"><b>+</b> ${cap(per.strength)} &nbsp; <b>−</b> ${cap(per.weakness)}</div>
       <div class="row"><b>Skill</b> ${skill}${secret ? ` &nbsp; <b>Secret</b> ${secret}` : ''}</div>
-      <div class="row"><b>Now</b> ${where} ${MOOD_TXT[p.mood]} ${p.why}${p.ask ? ' · <b>❗ wants to talk</b>' : ''}</div>
+      <div class="row"><b>Now</b> ${where} ${MOOD_TXT[p.mood]} ${p.why}${p.ask ? ` · <b>${ALERT} wants to talk</b>` : ''}</div>
       ${p.health ? `<div class="row"><b>Health</b> ${HEALTH_WORD[p.health]}</div>` : ''}
       ${p.keeps.length ? `<div class="row"><b>Keeps</b> ${p.keeps.join(' · ')}</div>` : ''}
       ${rec ? `<div class="row"><b>Ideas</b> ${rec.good} worked · ${rec.bad} didn't</div>` : ''}
@@ -328,9 +349,9 @@ export class Social {
     this.obDone = this.obDone.filter(d => (d.t -= 0.5) > 0);
     const esc = (t: string) => t.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
     const obHtml = this.obDone.map(d => `<div class="ob done">✓ ${esc(d.text)}</div>`).join('') +
-      obs.map(o => o.x !== undefined ? `<div class="ob at" data-x="${o.x.toFixed(1)}" data-z="${o.z!.toFixed(1)}">› ${esc(o.text)} ⌖</div>` : `<div class="ob">› ${esc(o.text)}</div>`).join('');
-    const tw = `${cur ? `TODAY: ${cur.title}<br>` : g.goals.opts.length ? 'TODAY: DECIDING...<br>' : ''}FOOD: ${st.word(st.totalFood, n)} · WATER: ${st.word(st.water, n)}${st.ration ? ' · HALF RATIONS' : ''}<div class="gh">GOALS</div>${obHtml}`;
-    if (this.todayEl.innerHTML !== tw) this.todayEl.innerHTML = tw;
+      obs.map(o => o.x !== undefined ? `<div class="ob at" data-x="${o.x.toFixed(1)}" data-z="${o.z!.toFixed(1)}">› ${esc(o.text)} ${ic('focus-2', 'var(--gold)')}</div>` : `<div class="ob">› ${esc(o.text)}</div>`).join('');
+    const tw = `${cur ? `<div class="st">TODAY <b>${cur.title}</b></div>` : g.goals.opts.length ? '<div class="st">TODAY <b>DECIDING…</b></div>' : ''}<div class="st">${ic('fish')} FOOD <b>${st.word(st.totalFood, n).toUpperCase()}</b> &nbsp; ${ic('droplet')} WATER <b>${st.word(st.water, n).toUpperCase()}</b>${st.ration ? ' &nbsp; HALF RATIONS' : ''}</div><div class="gh">GOALS</div>${obHtml}`;
+    if (this.todayKey !== tw) { this.todayKey = tw; this.todayEl.innerHTML = tw; }
     const party = this.lead.querySelector('.party') as HTMLElement;
     const list = [...g.party, ...g.people.filter(p => p.mode === 'rescued'), ...g.scouts, ...(g.crew.out ? [] : g.people.filter(p => p.crew && p.mode === 'camp'))];
     const pk = list.map(p => p.id + p.mode + p.mood + p.ask).join() + Math.round(game.rig.yaw * 2) + g.crew.mode + g.crew.out;
@@ -338,7 +359,7 @@ export class Social {
     if (this.cardP && this.card.classList.contains('open')) this.fillCard();
     if (this.roster.classList.contains('open')) this.fillRoster();
     if (this.journal.classList.contains('open') && (this.islandTab === 'map' ? (this.mapT -= 0.5) <= 0 : this.journalN !== S.journal.length)) { this.mapT = 1; this.fillJournal(); }
-    const pb = this.lead.querySelector('[data-a="roster"]') as HTMLElement, ph = g.jobs.fresh ? 'PEOPLE<span class="tag">NEW</span>' : 'PEOPLE';
+    const pb = this.lead.querySelector('[data-a="roster"]') as HTMLElement, ph = `${ic('users')} PEOPLE${g.jobs.fresh ? '<span class="tag">NEW</span>' : ''}`;
     if (pb.innerHTML !== ph) pb.innerHTML = ph;
   }
 
@@ -352,25 +373,25 @@ export class Social {
       const tag = e.querySelector('.tag') as HTMLElement;
       if (p.mode === 'scout' || p.mode === 'lost' || p.mode === 'hurt') {
         const tr = g.scouting.tripOf(p);
-        if (p.mode !== 'scout') tag.textContent = '❗';
+        if (p.mode !== 'scout') tag.innerHTML = ALERT;
         else if (tr) { const a = Math.atan2(tr.dir.z, tr.dir.x) + yaw; tag.innerHTML = `<span style="display:inline-block;transform:rotate(${a}rad)">➜</span>`; e.title += ` · scouting ${dirName(tr.dir.x, tr.dir.z)}`; }
-      } else tag.textContent = p.ask ? '❗' : p.mode === 'wait' ? '⏸' : MOOD_TXT[p.mood];
+      } else tag.innerHTML = p.ask ? ALERT : p.mode === 'wait' ? ic('player-pause', 'var(--dim)') : MOOD_TXT[p.mood];
       e.onclick = () => this.openCard(p);
     }
     for (const b of this.lead.querySelectorAll('.cm button')) b.classList.toggle('on', (b as HTMLElement).dataset.m === g.crew.mode);
     const empty = { alone: 'Going alone.<br>Nobody follows.', crew: g.crew.out ? 'Nobody came.<br>Click someone to ask.' : 'Your crew joins<br>when you leave camp', all: 'Everyone comes<br>when you leave camp' }[g.crew.mode];
-    if (!list.length) party.innerHTML = `<div style="font-size:7px;opacity:.6;padding:8px;line-height:1.7">${empty}</div>`;
+    if (!list.length) party.innerHTML = `<div class="emp">${empty}</div>`;
   }
 
   /** Everyone at a glance: what they're good and bad at, what you've learned about them, how they feel about you. */
   private fillRoster() {
     if (this.peopleTab === 'jobs') { this.fillJobs(); return; }
     const g = this.game.group, S = g.story;
-    const key = 'r' + g.people.map(p => p.mode + p.mood + p.ask + p.health + p.job + trustWord(p.per.trust) + S.skillKnown.has(p.id) + S.secretKnown.has(p.id) + JSON.stringify(g.requests.record.get(p.id) ?? '')).join();
+    const key = 'r' + g.crew.out + g.people.map(p => p.mode + p.mood + p.ask + p.health + p.job + p.crew + p.pin + trustWord(p.per.trust) + S.skillKnown.has(p.id) + S.secretKnown.has(p.id) + JSON.stringify(g.requests.record.get(p.id) ?? '')).join();
     if (key === this.rosterKey) return;
     this.rosterKey = key;
     const esc = (t: string) => t.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
-    this.roster.innerHTML = `<div class="x">✕</div>${this.peopleTabs()}<h4>SURVIVORS (${g.people.filter(p => p.mode !== 'dead').length}) — click someone for more</h4><div class="grid"></div>`;
+    this.roster.innerHTML = `${CLOSE}${this.peopleTabs()}<h4>SURVIVORS (${g.people.filter(p => p.mode !== 'dead').length}) <span>— click someone for their full card</span></h4><div class="grid"></div>`;
     const grid = this.roster.querySelector('.grid') as HTMLElement;
     const order = [g.leader!, ...g.people.filter(p => p !== g.leader)];
     for (const p of order) {
@@ -381,7 +402,7 @@ export class Social {
       const pair = per.pair >= 0 ? g.people[per.pair] : null, fr = S.friend(p), rv = S.rival(p), rec = g.requests.record.get(p.id);
       const ties = [pair && `Came with ${esc(pair.per.name)}`, fr && fr !== pair && `Friend: ${esc(fr.per.name)}`, rv && `Rival: ${esc(rv.per.name)}`].filter(Boolean).join(' · ');
       const html = `<div style="flex:1">
-        <div class="nm">${esc(per.name)} <span>${per.age}${isL ? ' · YOU' : ''}</span> ${p.ask ? '❗' : MOOD_TXT[p.mood]}</div>
+        <div class="nm">${esc(per.name)} <span>${per.age}${isL ? ' · YOU' : ''}</span> ${p.ask ? ALERT : MOOD_TXT[p.mood]}</div>
         <div class="dim">${p.mode === 'dead' ? `† ${esc(g.health.dead.find(d => d.name === per.name)?.cause ?? '')}` : `${where}${isL ? '' : ` · <span class="k">${trustWord(per.trust)}</span>`}${p.hurt ? ' · hurt' : ''}${p.health ? ` · <span class="b">${HEALTH_WORD[p.health]}</span>` : ''}${p.hungry ? ' · hungry' : ''}`}</div>
         <div class="dim">"${esc(per.backstory)}"</div>
         <div>${per.traits.map(cap).join(' · ')}</div>
@@ -392,16 +413,27 @@ export class Social {
         ${rec ? `<div class="dim">Ideas: ${rec.good} worked · ${rec.bad} didn't</div>` : ''}
         ${this.workLine(p)}
       </div>`;
-      const r = this.el(`<div class="r">${html}</div>`, grid);
+      const r = this.el(`<div class="r${p.mode === 'follow' || p.mode === 'wait' ? ' out' : ''}">${html}</div>`, grid);
       r.prepend(this.portrait(p));
-      // clicking a scout also follows them with the camera
-      r.onclick = () => { this.roster.classList.remove('open'); this.openCard(p); if (p.mode === 'scout' || p.mode === 'lost' || p.mode === 'hurt') { this.game.camWho = p; this.game.rig.followOn = true; } };
+      // act on someone right here; the page stays open
+      const acts: [string, string, () => void][] = [];
+      if (!isL && p.mode === 'camp') acts.push(g.crew.out ? ['Come with me', '', () => g.invite(p)] : [p.crew ? 'Comes next trip' : 'Bring next trip', p.crew ? 'on' : '', () => g.invite(p)]);
+      if (p.mode === 'follow' || p.mode === 'wait') acts.push(['Send home', '', () => g.dismiss(p)]);
+      const pj = (p.pin || p.job) as JobKind | '';
+      if (!isL && p.mode === 'camp' && pj) acts.push([p.pin ? `Kept on ${JOB[pj].label}` : `Keep on ${JOB[pj].label}`, p.pin ? 'on' : '', () => { p.pin = p.pin ? '' : pj; }]);
+      if (p.mode !== 'dead') acts.push(['Find', '', () => { this.roster.classList.remove('open'); this.find(p); }]);
+      if (acts.length) {
+        const bar = this.el('<div class="ra"></div>', r.lastElementChild as HTMLElement);
+        for (const [label, cls, fn] of acts) { const b = document.createElement('button'); b.textContent = label; b.className = cls; b.onclick = e => { e.stopPropagation(); fn(); this.rosterKey = ''; this.fillRoster(); }; bar.appendChild(b); }
+      }
+      // the full card opens on top; scouts get followed with the camera
+      r.onclick = () => { this.openCard(p); if (p.mode === 'scout' || p.mode === 'lost' || p.mode === 'hurt') { this.game.camWho = p; this.game.rig.followOn = true; } };
     }
   }
 
   /** ISLAND page: the full map, or the journal. */
   private fillJournal() {
-    const tabs = `<div class="x">✕</div><div class="tabs"><button data-t="map" class="${this.islandTab === 'map' ? 'on' : ''}">MAP</button><button data-t="journal" class="${this.islandTab === 'journal' ? 'on' : ''}">JOURNAL</button></div>`;
+    const tabs = `${CLOSE}<div class="tabs"><button data-t="map" class="${this.islandTab === 'map' ? 'on' : ''}">MAP</button><button data-t="journal" class="${this.islandTab === 'journal' ? 'on' : ''}">JOURNAL</button></div>`;
     if (this.islandTab === 'map') {
       if (!this.journal.querySelector('.wrap')) this.journal.innerHTML = tabs + `<h4>THE ISLAND — click anywhere to look there</h4><div class="wrap"><canvas width="384" height="384"></canvas></div><div class="leg">◆ PLACE &nbsp; ~ WATER &nbsp; ✱ FOOD &nbsp; ■ BUILDING &nbsp; <span style="color:#ffd65a">? RUMOR</span> &nbsp; <span style="color:#ff5a4a">! TROUBLE</span> &nbsp; <span style="color:#8af07a">■ YOUR GROUP</span> &nbsp; <span style="color:#ffa040">■ SCOUT</span> &nbsp; □ YOU</div>`;
       drawIslandMap(this.game, this.journal.querySelector('canvas')!, this.journal.querySelector('.wrap')!, this.mapBase);
@@ -422,11 +454,12 @@ export class Social {
 
   /** What someone does all day, how good they are at it, what they like. */
   private workLine(p: Person) {
+    if (p.mode === 'dead') return '';
     const g = this.game.group, J = g.jobs;
     const exp = Object.entries(p.xp).filter(([k, v]) => v >= 6 && (JOB[k as JobKind].skill !== p.per.skill || g.story.skillKnown.has(p.id))).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k, v]) => `${JOB[k as JobKind].label} (${LEVEL_WORD[level(v)]})`);
     const likes = [J.likeKnown.has(p.id + ':love') ? `Loves ${JOB[p.love as JobKind].verb}` : '', J.likeKnown.has(p.id + ':hate') ? `Hates ${JOB[p.hate as JobKind].verb}` : '',
       J.likeKnown.has(p.id + ':out+') ? 'Loves getting out' : '', J.likeKnown.has(p.id + ':out-') ? 'Hates leaving camp' : ''].filter(Boolean).join(' · ');
-    const now = p.mode === 'follow' || p.mode === 'wait' ? 'Out with you' : p.job ? `${JOB[p.job as JobKind].label}${p.pin ? ' 📌' : ''}` : p === g.leader ? 'Leading' : p.crew ? 'Free time · comes next trip' : 'Free time';
+    const now = p.mode === 'follow' || p.mode === 'wait' ? 'Out with you' : p.job ? `${JOB[p.job as JobKind].label}${p.pin ? ' ' + ic('pin', 'var(--gold)') : ''}` : p === g.leader ? 'Leading' : p.crew ? 'Free time · comes next trip' : 'Free time';
     return `<div><span class="k">Job</span> ${now}${exp.length ? ` <span class="dim">· ${exp.join(', ')}</span>` : ''}</div>${likes ? `<div class="dim">${likes}</div>` : ''}`;
   }
 
@@ -438,7 +471,7 @@ export class Social {
     if (key === this.rosterKey) return;
     this.rosterKey = key;
     const shiftG = { day: '☀', evening: '☀☾', night: '☾' };
-    let html = `<div class="x">✕</div>${this.peopleTabs()}<h4>JOBS — the camp decides who does what. Click a priority to change it.</h4>`;
+    let html = `${CLOSE}${this.peopleTabs()}<h4>JOBS — the camp decides who does what. Click a priority to change it.</h4>`;
     if (!vis.length) html += '<div class="dim" style="line-height:2">No jobs yet. Find fresh water and food first; jobs show up as the camp can do them.</div>';
     for (const k of JOB_KINDS) if (vis.includes(k)) {
       const s = J.status(k), bad = s === 'Short-handed' || s.startsWith('Waiting') || s === 'Raining';
@@ -519,7 +552,7 @@ export class Social {
     const key = r.p.id + r.text;
     if (key !== this.askKey) {
       this.askKey = key;
-      this.askEl.innerHTML = `<div class="x">✕</div><div class="who">${r.p.per.name.toUpperCase()}</div><div></div><div class="acts"></div>`;
+      this.askEl.innerHTML = `${CLOSE}<div class="who">${r.p.per.name.toUpperCase()}</div><div></div><div class="acts"></div>`;
       (this.askEl.children[2] as HTMLElement).textContent = `"${r.text}"`;
       (this.askEl.querySelector('.x') as HTMLElement).onclick = () => { this.askOpen = false; };
       const acts = this.askEl.querySelector('.acts') as HTMLElement;

@@ -1,4 +1,9 @@
 import '@fontsource/press-start-2p';
+import '@fontsource/oswald/400.css';
+import '@fontsource/oswald/500.css';
+import '@fontsource/alegreya-sans/400.css';
+import '@fontsource/alegreya-sans/500.css';
+import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 import { B, N, World } from '../world/island';
 import type { Game } from '../game';
 import type { WeatherKind } from '../sim/weather';
@@ -9,37 +14,45 @@ import { ZOOMS } from '../render/camera';
 import { clearSave, stopSaving } from '../life/save';
 
 const CSS = `
-.hud { position: absolute; font-family: 'Press Start 2P', monospace; color: #f4f1e6; user-select: none; z-index: 5; }
-.pill { background: #121a33e6; border: 3px solid #2b3766; border-radius: 22px; padding: 12px 18px; display: inline-flex; align-items: center; gap: 12px; box-shadow: 0 3px 0 #0007; }
-#clock { top: 14px; left: 14px; font-size: 18px; }
-#clock .ic { font-size: 20px; width: 22px; text-align: center; }
-#wx { top: 72px; left: 14px; font-size: 11px; padding: 9px 14px; }
-#speed { top: 116px; left: 14px; display: flex; gap: 6px; }
-#speed button, .btn { font: 10px 'Press Start 2P', monospace; color: #f4f1e6; background: #121a33e6; border: 3px solid #2b3766; border-radius: 10px; padding: 8px 10px; cursor: pointer; }
-#speed button.on, .btn.on { background: #3b4f9a; border-color: #7d92e0; }
-#mini { top: 14px; right: 14px; border: 3px solid #2b3766; border-radius: 12px; background: #1c4672; box-shadow: 0 3px 0 #0007; cursor: pointer; overflow: hidden; line-height: 0; }
+:root { --sl: rgba(32,35,33,.93); --sl2: #2f3331; --sl3: #3b3f3c; --ln: #4a4e4b; --ink: #ebe7de; --dim: #9a9c97; --gold: #c9a24a; --sea: #9fc3c9; --ok: #a8c98e; --bad: #e08a70;
+  --hd: 'Oswald', sans-serif; --tx: 'Alegreya Sans', sans-serif; }
+.hud { position: absolute; font-family: var(--tx); color: var(--ink); user-select: none; z-index: 5; }
+.pill { background: var(--sl); border-radius: 3px; padding: 9px 14px; display: inline-flex; align-items: center; gap: 10px; box-shadow: 0 2px 10px #0005; }
+.ti { font-size: 1.15em; vertical-align: -0.12em; }
+#clock { top: 14px; left: 14px; font: 500 20px var(--hd); letter-spacing: 2px; border-left: 3px solid var(--gold); }
+#clock .ic { color: var(--gold); font-size: 22px; }
+#clock .tal { font: 400 14px var(--tx); color: var(--dim); letter-spacing: 0; }
+#wx { top: 66px; left: 14px; font: 400 13px var(--hd); letter-spacing: 2px; color: var(--sea); }
+#speed { top: 106px; left: 14px; display: flex; gap: 0; }
+#speed button, .btn, #zoom button { font: 500 13px var(--hd); letter-spacing: 1.5px; color: var(--ink); background: var(--sl); border: 0; border-bottom: 2px solid transparent; border-radius: 2px; padding: 7px 11px; cursor: pointer; }
+#speed button + button, #zoom button + button { border-left: 1px solid var(--ln); }
+#speed button:hover, .btn:hover, #zoom button:hover { background: var(--sl3); }
+#speed button.on, .btn.on { color: var(--gold); border-bottom-color: var(--gold); }
+#mini { top: 14px; right: 14px; border-radius: 3px; background: #1c4672; box-shadow: 0 2px 10px #0006; cursor: pointer; overflow: hidden; line-height: 0; outline: 3px solid var(--sl); }
 #mini canvas { image-rendering: pixelated; width: 210px; height: 210px; }
-#rbtns { top: 240px; right: 14px; display: flex; gap: 6px; }
-.page { position: absolute; z-index: 9; left: 50%; top: 50%; transform: translate(-50%, -50%); font-family: 'Press Start 2P', monospace; color: #f4f1e6; background: #121a33f5; border: 3px solid #2b3766; border-radius: 14px; box-shadow: 0 4px 0 #0008; padding: 16px 20px; display: none; }
-.page.open { display: block; }
-.page h4 { font-size: 11px; margin: 0 0 10px; font-weight: normal; color: #ffd65a; }
-.page .x { position: absolute; right: 14px; top: 12px; cursor: pointer; font-size: 12px; }
-#help { width: min(760px, 94vw); max-height: 84vh; overflow-y: auto; font-size: 8px; line-height: 2; }
-#help h5 { font-size: 9px; color: #ffd65a; margin: 12px 0 4px; font-weight: normal; }
-#help .row { display: flex; gap: 12px; } #help .row b { flex: none; width: 210px; font-weight: normal; color: #9fb0ff; }
+#rbtns { top: 236px; right: 14px; display: flex; gap: 6px; }
+.page { position: absolute; z-index: 9; left: 50%; top: 50%; transform: translate(-50%, -50%); font-family: var(--tx); color: var(--ink); background: var(--sl); border-left: 3px solid var(--gold); border-radius: 3px; box-shadow: 0 6px 30px #0008; padding: 18px 22px; display: none; }
+.page.open { display: block; animation: pgin .18s ease-out; }
+@keyframes pgin { from { opacity: 0; transform: translate(-50%, -48%); } to { opacity: 1; transform: translate(-50%, -50%); } }
+.page h4 { font: 500 15px var(--hd); letter-spacing: 2.5px; margin: 0 0 12px; color: var(--gold); }
+.page .x { position: absolute; right: 16px; top: 14px; cursor: pointer; font-size: 18px; color: var(--dim); }
+.page .x:hover { color: var(--ink); }
+#help { width: min(780px, 94vw); max-height: 84vh; overflow-y: auto; font-size: 15px; line-height: 1.6; }
+#help h5 { font: 500 13px var(--hd); letter-spacing: 2px; color: var(--gold); margin: 16px 0 6px; }
+#help .row { display: flex; gap: 14px; padding: 3px 0; border-bottom: 1px solid #ffffff0d; } #help .row b { flex: none; width: 200px; font-weight: 500; color: var(--sea); }
 #journal .wrap { position: relative; line-height: 0; }
-#journal canvas { image-rendering: pixelated; width: min(78vh, 86vw); height: min(78vh, 86vw); border-radius: 8px; cursor: crosshair; }
-#journal .ml { position: absolute; transform: translate(-50%, -130%); font: 8px 'Press Start 2P', monospace; color: #fff; text-shadow: 0 2px 0 #000, 0 0 3px #000; white-space: nowrap; pointer-events: none; line-height: 1; }
-#journal .ml.r { color: #ffd65a; font-size: 7px; } #journal .ml.c { color: #ffdd55; }
-#journal .leg { font-size: 7px; opacity: .8; margin-top: 10px; line-height: 1.8; }
-#zoom { top: 116px; left: 222px; display: flex; gap: 6px; align-items: center; }
-#zoom button { font: 10px 'Press Start 2P', monospace; color: #f4f1e6; background: #121a33e6; border: 3px solid #2b3766; border-radius: 10px; padding: 8px 10px; cursor: pointer; }
-#zoom .dots { font-size: 10px; letter-spacing: 2px; text-shadow: 0 2px 0 #000; }
-#panel { top: 286px; right: 14px; width: 260px; display: none; flex-direction: column; gap: 12px; font-size: 10px; line-height: 1.6; background: #121a33f2; border: 3px solid #2b3766; border-radius: 14px; padding: 14px; }
+#journal canvas { image-rendering: pixelated; width: min(74vh, 86vw); height: min(74vh, 86vw); border-radius: 2px; cursor: crosshair; }
+#journal .ml { position: absolute; transform: translate(-50%, -130%); font: 500 13px var(--tx); color: #fff; text-shadow: 0 1px 2px #000, 0 0 4px #000; white-space: nowrap; pointer-events: none; line-height: 1; }
+#journal .ml.r { color: var(--gold); font-size: 12px; } #journal .ml.c { color: #ffdd77; }
+#journal .leg { font-size: 13px; color: var(--dim); margin-top: 10px; line-height: 1.6; }
+#zoom { top: 106px; left: 196px; display: flex; gap: 0; align-items: center; }
+#zoom .dots { font-size: 9px; letter-spacing: 3px; padding: 0 10px; color: var(--ink); text-shadow: 0 1px 3px #000; }
+#panel { top: 282px; right: 14px; width: 270px; display: none; flex-direction: column; gap: 10px; font-size: 15px; line-height: 1.5; background: var(--sl); border-left: 3px solid var(--gold); border-radius: 3px; padding: 14px 16px; box-shadow: 0 2px 10px #0005; }
 #panel.open { display: flex; }
 #panel label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-#panel input[type=text], #panel select { font: 10px 'Press Start 2P', monospace; background: #0b1020; color: #f4f1e6; border: 2px solid #2b3766; border-radius: 6px; padding: 6px; width: 110px; }
-#hint { bottom: 12px; right: 14px; font-size: 8px; opacity: 0.8; padding: 8px 12px; }
+#panel input[type=text], #panel select { font: 14px var(--tx); background: var(--sl2); color: var(--ink); border: 1px solid var(--ln); border-radius: 2px; padding: 5px 7px; width: 120px; }
+#panel input[type=checkbox] { accent-color: var(--gold); width: 16px; height: 16px; }
+#hint { bottom: 12px; right: 14px; font: 400 12px var(--hd); letter-spacing: 1.5px; color: var(--dim); padding: 7px 12px; }
 @media (max-width: 1180px) { #hint { display: none; } }
 `;
 
@@ -59,11 +72,11 @@ ${row('Scroll  or  − / +', 'Zoom in and out.')}
 ${row('Q / E', 'Turn the view.')}
 ${row('II  1x  2x  4x', 'Pause and game speed (Space pauses too).')}
 <h5>WHAT THE MARKS MEAN</h5>
-${row('<span style="color:#ffd65a">❗</span> over someone', 'They want to talk. Click them to answer, or ignore them and they decide alone.')}
+${row('<i class="ti ti-alert-circle" style="color:var(--gold)"></i> over someone', 'They want to talk. Click them to answer, or ignore them and they decide alone.')}
 ${row('<span style="color:#ffd65a">?</span> in a yellow ring', 'A rumor. Walk into the ring to see if it is true. Some people lie.')}
 ${row('<span style="color:#ff5a4a">!</span> in a red ring', 'Someone is lost or hurt out there. Go and find them.')}
 ${row('Dotted trail', "A scout's path. Click it to follow them with the camera.")}
-${row('Faces', '😊 happy · 😠 angry · 😟 worried · 😢 sad or hungry · 😨 scared · 💤 tired · ❤ fond · 🤕 hurt')}
+${row('Faces', '<i class="ti ti-mood-smile"></i> happy · <i class="ti ti-mood-angry"></i> angry · <i class="ti ti-mood-confuzed"></i> worried · <i class="ti ti-mood-sad"></i> sad or hungry · <i class="ti ti-mood-nervous"></i> scared · <i class="ti ti-zzz"></i> tired · <i class="ti ti-heart"></i> fond · <i class="ti ti-bandage"></i> hurt')}
 <h5>HOW THE DAY WORKS</h5>
 ${row('Morning', 'Three people suggest a plan. Pick one; the camp works on it all day. Time slows while you choose.')}
 ${row('Daytime', 'People gather food and water on their own, and come to you with ideas. Some ideas are bad: watch how they ask.')}
@@ -72,7 +85,7 @@ ${row('Night', 'Everyone sits at the fire and talks. Secrets slip out. Out in th
 <h5>WORDS</h5>
 ${row('Trust', 'Loyal › Trusts you › Unsure › Doubts you › Against you')}
 ${row('Food / water', 'Plenty › Enough › Low › Out')}
-${row('GOALS box', 'What to do next. Click a goal with ⌖ to look there.')}
+${row('GOALS box', 'What to do next. Click a goal with the target mark to look there.')}
 `;
 
 const BIOME_RGB: Record<number, number[]> = {
@@ -87,7 +100,7 @@ export class Hud {
   constructor(private game: Game, audio: Ambience) {
     const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
     const el = (html: string) => { const d = document.createElement('div'); d.innerHTML = html.trim(); const e = d.firstElementChild as HTMLElement; document.body.appendChild(e); return e; };
-    this.clockEl = el('<div id="clock" class="hud pill"><span class="ic">☀</span><span class="t">DAY 1 - 06:00</span></div>');
+    this.clockEl = el('<div id="clock" class="hud pill"><i class="ic ti ti-sun"></i><span class="t">DAY 1 · 06:00</span></div>');
     this.wxEl = el('<div id="wx" class="hud pill">CLEAR</div>');
     const speed = el('<div id="speed" class="hud"><button data-s="0">II</button><button data-s="1" class="on">1x</button><button data-s="2">2x</button><button data-s="4">4x</button></div>');
     speed.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
@@ -96,7 +109,7 @@ export class Hud {
     addEventListener('keydown', e => { if (e.key === ' ' && (e.target as HTMLElement).tagName !== 'INPUT') { e.preventDefault(); (speed.querySelector(game.clock.speed ? '[data-s="0"]' : '[data-s="1"]') as HTMLButtonElement).click(); } });
 
     // zoom: one click per level, so the middle view is always easy to get back to
-    this.zoomEl = el('<div id="zoom" class="hud"><button data-z="-1">−</button><span class="dots"></span><button data-z="1">+</button><button data-home title="Look at camp">CAMP</button></div>');
+    this.zoomEl = el('<div id="zoom" class="hud"><button data-z="-1"><i class="ti ti-minus"></i></button><span class="dots"></span><button data-z="1"><i class="ti ti-plus"></i></button><button data-home title="Look at camp" style="margin-left:6px"><i class="ti ti-home"></i> CAMP</button></div>');
     this.zoomEl.querySelectorAll('button[data-z]').forEach(b => b.addEventListener('click', () => game.rig.setZoom(game.rig.zoomI + Number((b as HTMLElement).dataset.z))));
     (this.zoomEl.querySelector('[data-home]') as HTMLElement).onclick = () => { game.rig.jumpTo(game.group.fire.x, game.group.fire.z); game.rig.followOn = false; game.camWho = null; };
 
@@ -121,9 +134,9 @@ export class Hud {
       miniWrap.title = best;
     });
 
-    const rb = el('<div id="rbtns" class="hud"><button class="btn" data-b="help">?</button><button id="gear" class="btn">⚙ SETTINGS</button></div>');
+    const rb = el('<div id="rbtns" class="hud"><button class="btn" data-b="help"><i class="ti ti-help"></i> HELP</button><button id="gear" class="btn"><i class="ti ti-settings"></i> SETTINGS</button></div>');
     const gear = rb.querySelector('#gear') as HTMLElement;
-    this.help = el(`<div id="help" class="page"><div class="x">✕</div><h4>HOW TO PLAY</h4>${HELP}</div>`);
+    this.help = el(`<div id="help" class="page"><div class="x"><i class="ti ti-x"></i></div><h4>HOW TO PLAY</h4>${HELP}</div>`);
     const close = () => { this.help.classList.remove('open'); };
     (this.help.querySelector('.x') as HTMLElement).onclick = close;
     rb.querySelectorAll('[data-b]').forEach(b => b.addEventListener('click', () => {
@@ -161,7 +174,7 @@ export class Hud {
     panel.querySelector('#o-go')!.addEventListener('click', () => go((panel.querySelector('#o-seed') as HTMLInputElement).value || 1));
     panel.querySelector('#o-again')!.addEventListener('click', () => { if (confirm('Start this island over? Your saved game on it will be lost.')) { stopSaving(); clearSave(game.world.seed); go(game.world.seed); } });
     panel.querySelector('#o-rand')!.addEventListener('click', () => go((Math.random() * 1e9) | 0));
-    el('<div id="hint" class="hud pill">CLICK: GO &nbsp; RIGHT-CLICK: WHISTLE &nbsp; DRAG: LOOK &nbsp; SCROLL: ZOOM &nbsp; Q/E: TURN</div>');
+    el('<div id="hint" class="hud pill">CLICK: GO &nbsp;·&nbsp; RIGHT-CLICK: WHISTLE &nbsp;·&nbsp; DRAG: LOOK &nbsp;·&nbsp; SCROLL: ZOOM &nbsp;·&nbsp; Q/E: TURN</div>');
     document.querySelectorAll('.hud').forEach(e => e.addEventListener('pointerdown', (ev: Event) => ev.stopPropagation()));
   }
 
@@ -172,11 +185,11 @@ export class Hud {
     const night = c.night > 0.5, h = c.hour;
     const dots = ZOOMS.map((_, i) => i === g.rig.zoomI ? '●' : '○').join('');
     const de = this.zoomEl.querySelector('.dots') as HTMLElement; if (de.textContent !== dots) de.textContent = dots;
-    (this.clockEl.querySelector('.ic') as HTMLElement).textContent = night ? '☾' : h < 7 || h > 18 ? '◐' : '☀';
+    const ic = this.clockEl.querySelector('.ic') as HTMLElement, icn = `ic ti ti-${night ? 'moon' : h < 7 || h > 18 ? 'sunset-2' : 'sun'}`; if (ic.className !== icn) ic.className = icn;
     const tally = ('||||| '.repeat(Math.floor(c.day / 5)) + '|'.repeat(c.day % 5)).trim();
-    (this.clockEl.querySelector('.t') as HTMLElement).innerHTML = `DAY ${c.day} <span style="font-size:11px;opacity:.75;letter-spacing:-2px">${tally}</span> - ${c.label}`;
-    const label = wx.storm > 0.6 ? '⛈ STORM' : wx.rain > 0.3 ? '☂ RAIN' : wx.cloud > 0.5 ? '☁ CLOUDY' : night ? '✦ CLEAR NIGHT' : '☀ CLEAR';
-    if (this.wxEl.textContent !== label) this.wxEl.textContent = label;
+    (this.clockEl.querySelector('.t') as HTMLElement).innerHTML = `DAY ${c.day} <span class="tal">${tally}</span> · ${c.label}`;
+    const label = wx.storm > 0.6 ? '<i class="ti ti-cloud-storm"></i> STORM' : wx.rain > 0.3 ? '<i class="ti ti-cloud-rain"></i> RAIN' : wx.cloud > 0.5 ? '<i class="ti ti-cloud"></i> CLOUDY' : night ? '<i class="ti ti-moon-stars"></i> CLEAR NIGHT' : '<i class="ti ti-sun"></i> CLEAR';
+    if (this.wxEl.innerHTML !== label) this.wxEl.innerHTML = label;
     // minimap + camera footprint
     const m = this.mini.getContext('2d')!, k = 192 / N, r = g.rig, t = r.target;
     const disc = g.group.disc;
