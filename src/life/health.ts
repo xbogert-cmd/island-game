@@ -45,22 +45,25 @@ export class Health {
     const tended = g.people.some(o => o.job === 'tend' && o.mode === 'camp');
     const medic = g.people.find(o => o.per.skill === 'medic' && o.mode === 'camp' && o.health < 2);
     const careAt = (p: Person) => C.has('sickbay') && (tended || !!medic) && Math.hypot(p.x - C.get('sickbay')!.x, p.z - C.get('sickbay')!.z) < 10;
+    // healing plants: a dose for each sick person, while they last
+    const herbs = (p: Person) => { if (p.health < 2 || g.stock.herbs <= 0) return false; g.stock.herbs--; return true; };
     for (const p of alive) {
+      const dosed = herbs(p);
       // the very sick who weren't looked after
       if (p.health >= 3) {
         const neglect = p.hungry || this.thirsty || !careAt(p);
-        if (Math.random() < (neglect ? 0.25 : 0.03)) { this.die(p, neglect ? 'sickness nobody could treat' : 'sickness', neglect); continue; }
+        if (Math.random() < (neglect ? 0.25 : 0.03) * (dosed ? 0.5 : 1)) { this.die(p, neglect ? 'sickness nobody could treat' : 'sickness', neglect); continue; }
       }
       p.hungerN = p.hungry ? p.hungerN + 1 : 0;
       let worse = '';
       if (p.hungerN >= 2) worse = 'hunger';
       else if (this.thirsty && Math.random() < 0.35) worse = 'no clean water';
       else if (g.stats.spoiled > 3 && !C.has('storage') && Math.random() < 0.06) worse = 'bad food';
-      else if (p.hurt && !C.has('sickbay') && !medic && Math.random() < 0.18) worse = 'an infected wound';
+      else if (p.hurt && !C.has('sickbay') && !medic && Math.random() < (g.ideas.done('herbs') && g.stock.herbs > 0 ? 0.09 : 0.18)) worse = 'an infected wound';
       else if (p.health < 2 && sick && Math.random() < 0.04 * sick * (C.has('bath') ? 0.5 : 1)) worse = 'caught it from the others';
       if (worse) { this.worsen(p, worse); continue; }
       if (p.health > 0 && !p.hungry && !this.thirsty) {
-        const odds = 0.3 + (careAt(p) ? 0.35 : 0) + (medic ? 0.1 : 0) + (g.goals.active('rest') ? 0.15 : 0);
+        const odds = 0.3 + (careAt(p) ? 0.35 : 0) + (medic ? 0.1 : 0) + (g.goals.active('rest') ? 0.15 : 0) + (dosed ? 0.2 : 0);
         if (Math.random() < odds) this.better(p);
       }
     }

@@ -109,7 +109,7 @@ export class Hud {
     addEventListener('keydown', e => { if (e.key === ' ' && (e.target as HTMLElement).tagName !== 'INPUT') { e.preventDefault(); (speed.querySelector(game.clock.speed ? '[data-s="0"]' : '[data-s="1"]') as HTMLButtonElement).click(); } });
 
     // zoom: one click per level, so the middle view is always easy to get back to
-    this.zoomEl = el('<div id="zoom" class="hud"><button data-z="-1"><i class="ti ti-minus"></i></button><span class="dots"></span><button data-z="1"><i class="ti ti-plus"></i></button><button data-home title="Look at camp" style="margin-left:6px"><i class="ti ti-home"></i> CAMP</button></div>');
+    this.zoomEl = el('<div id="zoom" class="hud"><button data-z="-1"><i class="ti ti-minus"></i></button><span class="dots"></span><button data-z="1"><i class="ti ti-plus"></i></button><button data-home title="Look at camp" style="margin-left:6px"><i class="ti ti-home"></i></button></div>');
     this.zoomEl.querySelectorAll('button[data-z]').forEach(b => b.addEventListener('click', () => game.rig.setZoom(game.rig.zoomI + Number((b as HTMLElement).dataset.z))));
     (this.zoomEl.querySelector('[data-home]') as HTMLElement).onclick = () => { game.rig.jumpTo(game.group.fire.x, game.group.fire.z); game.rig.followOn = false; game.camWho = null; };
 

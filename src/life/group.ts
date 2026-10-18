@@ -17,6 +17,9 @@ import { Health, HEALTH_WORD } from './health';
 import { Cat } from './cat';
 import { Chatter } from './chatter';
 import { Crew } from './crew';
+import { Ideas } from './ideas';
+import { Village } from './village';
+import { Canoe } from './canoe';
 import { Building } from './buildings';
 import { mulberry32 } from '../world/noise';
 
@@ -43,9 +46,12 @@ export class Group {
   cat: Cat;
   chatter: Chatter;
   crew: Crew;
+  ideas: Ideas;
+  village: Village;
+  canoe: Canoe;
   /** a build site you're helping with */
   helping: Building | null = null;
-  era: 'crash' | 'camp' = 'crash';
+  era: 'crash' | 'camp' | 'village' = 'crash';
   /** title cards that aren't places (era changes) */
   eraCards: { title: string; sub: string }[] = [];
   /** what happened today, for tomorrow's recap */
@@ -84,6 +90,7 @@ export class Group {
   onAsk = () => {};
   onSting = (_good: boolean) => {};
   onClunk = () => {};
+  onQuake = (_k: number) => {};
 
   constructor(public w: World, public clock: Clock, public weather: Weather, public fx: Particles) {
     this.grid = new WalkGrid(w);
@@ -110,6 +117,9 @@ export class Group {
     this.cat = new Cat(this);
     this.chatter = new Chatter(this);
     this.crew = new Crew(this);
+    this.ideas = new Ideas(this);
+    this.village = new Village(this);
+    this.canoe = new Canoe(this);
     // something from home in every pocket
     const rk = mulberry32(w.seed ^ 0x6b33), ks = [...KEEPSAKES].sort(() => rk() - 0.5);
     this.people.forEach((p, i) => { p.keeps = [ks[i % ks.length]]; });
@@ -160,6 +170,7 @@ export class Group {
   clickGround(x: number, z: number) {
     const L = this.leader; if (!L) return;
     if (this.scoutPick) { const p = this.scoutPick; this.scoutPick = null; this.scouting.send(p, x, z); return; }
+    if (this.canoe.click(x, z)) return;
     // clicking a build site: you pitch in
     const b = this.camp.queue.find(b => b.kind !== 'fence' && Math.hypot(b.x - x, b.z - z) < 3.5) ?? null;
     this.helping = b;
@@ -303,6 +314,7 @@ export class Group {
     // the leader
     const lx = L.x, lz = L.z;
     if (L.actT > 0) { L.actT -= dt; L.pose = 'sleep'; }
+    else if (this.canoe.riding(L)) L.torch = night;
     else {
       const done = this.bodies.advance(L, this.bodies.speed(L) * 1.1, dt);
       L.pose = done ? 'idle' : L.hurt ? 'limp' : 'walk';
@@ -316,7 +328,7 @@ export class Group {
 
     let idx = 0;
     for (const p of this.people) {
-      if (p === L || p.mode === 'dead') continue;
+      if (p === L || p.mode === 'dead' || this.canoe.riding(p)) continue;
       if (p.mode === 'asleep') { if ((p.actT -= dt) <= 0) { p.mode = 'camp'; p.poseO = 'startle'; p.poseT = 0.7; p.act = ''; p.actT = 1 + Math.random() * 2; } else p.pose = 'sleep'; continue; }
       if (p.mode === 'follow' || p.mode === 'rescued') this.follow(p, idx++, dt, night);
       else if (p.mode === 'wait') this.waitHere(p, dt);
@@ -328,12 +340,14 @@ export class Group {
       if (p.hurt && !this.hurtSeen.has(p)) { this.hurtSeen.add(p); this.stats.hurt.push(p.per.name); } else if (!p.hurt) this.hurtSeen.delete(p);
       if (p.hurt && p.heal > 0 && p.mode === 'camp' && (p.heal -= dt * this.healRate(p)) <= 0) { p.hurt = false; this.story.toast(`${p.per.name} is back on their feet.`, 'good', p); }
     }
+    this.canoe.update(dt);
     this.crew.update(dt);
     this.scouting.update(dt);
     this.requests.update(dt);
     this.goals.update();
     this.jobs.update(dt);
     this.health.update(dt);
+    this.village.update(dt);
     this.cat.update(dt);
     this.camp.storm(dt, rain, this.weather.wind);
     if (this.era === 'crash' && this.disc.pois.some(q => q.known && q.kind === 'water') && this.disc.pois.some(q => q.known && q.kind === 'food')) this.newEra();
@@ -414,10 +428,12 @@ export class Group {
   private campLife(p: Person, dt: number, night: boolean, rain: number) {
     const B_ = this.bodies, F = this.fire, S = this.story, h = this.clock.hour;
     p.torch = false;
+    if (p.up && !(p.job === 'lookout' && this.jobs.on(p))) p.up = 0;
     if (p.act === 'ask' || p.act === 'job') { this.requests.drive(p, dt); return; }
     if (p.act === 'huddle') { this.goals.drive(p, dt); return; }
     if (p.act === 'funeral') { this.health.drive(p, dt); return; }
     if (p.act === 'haul') { this.crew.unload(p, dt); return; }
+    if (p.act === 'gather') { this.village.drive(p, dt); return; }
     if (p.sleepIn && h >= 10) p.sleepIn = false;
     if (p.job && this.jobs.on(p)) { if (p.act) { p.act = ''; p.partner = null; } this.jobs.drive(p, dt); return; }
     if (p.job) { p.wph = ''; if (p.carry && p.bring) { this.deposit(p); p.carry = 0; } }
@@ -449,7 +465,8 @@ export class Group {
         // scratching around near camp for anything to eat
         p.pose = 'search';
         if ((p.actT -= dt) > 0) return;
-        if (Math.random() < 0.3) { const k = heightAt(this.w, p.x, p.z) < 2 ? 'shell' : 'fruit'; p.haul = [k]; p.carry = 1; p.act = 'haul'; S.say(p, k === 'shell' ? 'Clams! Not much, but something.' : 'Found a few berries.', 2); }
+        const dry = this.stock.water < this.stock.totalFood;
+        if (Math.random() < 0.3) { const k = dry ? 'water' : heightAt(this.w, p.x, p.z) < 2 ? 'shell' : 'fruit'; p.haul = [k]; p.carry = 1; p.act = 'haul'; S.say(p, k === 'water' ? pickOf(['Rainwater in the rocks!', 'Coconuts, full of water.']) : k === 'shell' ? 'Clams! Not much, but something.' : 'Found a few berries.', 2); }
         else { p.act = ''; p.actT = 1; }
         return;
       }
@@ -488,8 +505,8 @@ export class Group {
       const calm = camp.find(o => has(o.per, 'calm') && o !== rv);
       if (calm) setTimeout(() => S.say(calm, 'Hey! Both of you, enough.'), 2500);
     }]);
-    // food running low: free hands go looking for scraps near camp
-    if (this.stock.totalFood < this.people.length * 0.6 && h > 7 && h < 17.5) opts.push([5, () => {
+    // food or water running low: free hands go looking near camp
+    if ((this.stock.totalFood < this.people.length * 0.6 || this.stock.water < this.people.length * 0.6) && h > 7 && h < 17.5) opts.push([5, () => {
       p.act = 'forage'; p.actT = 6 + Math.random() * 4;
       for (let k = 0; k < 6; k++) { const a = Math.random() * 6.28, r = 10 + Math.random() * 16, x = F.x + Math.cos(a) * r, z = F.z + Math.sin(a) * r; if (this.grid.walkable(x, z)) { goTo(x, z); break; } }
     }]);
@@ -504,14 +521,16 @@ export class Group {
 
   /** Drop what they carried on the pile. A hoarder keeps some back. */
   deposit(p: Person) {
-    const k = p.bring as Food | 'water' | Mat; p.bring = '';
+    const k = p.bring as Food | 'water' | Mat | 'herbs'; p.bring = '';
     if (!k) return;
+    if (k === 'herbs') { this.stock.herbs += 2; p.poseO = 'collect'; p.poseT = 0.6; return; }
     p.poseO = 'collect'; p.poseT = 0.6;
     const food = k !== 'water' && !(k in this.stock.mat);
     if (food && p.per.secret === 'hoarder' && !this.story.secretKnown.has(p.id) && Math.random() < 0.3) { this.stock.stolen += 2; return; }
     if (k === 'fish') this.story.revealSkill(p, `${p.per.name} came back from the shore with fish. They grew up fishing.`);
     const basket = this.stock.tools.basket > 0 && (k === 'fruit' || k === 'coconut' || k === 'shell' || k === 'vines') ? 1 : 0;
-    this.stock.add(k, (k === 'fish' ? (this.camp.has('dryingRack') ? 4 : 3) : k === 'meat' ? (p.carry === 3 ? 4 : 2) : k in this.stock.mat ? 3 : 2) + basket);
+    this.ideas.noted(p, k);
+    this.stock.add(k, (k === 'fish' ? (this.camp.has('dryingRack') ? 4 : 3) + (this.camp.has('canoe') ? 1 : 0) : k === 'meat' ? (p.carry === 3 ? 4 : 2) : k in this.stock.mat ? 3 : 2) + basket);
     this.onClunk();
   }
 
@@ -544,13 +563,13 @@ export class Group {
   private campTick(dt: number, rain: number) {
     const S = this.story, st = this.stock, h = this.clock.hour;
     if (this.mealT > 0) this.mealT -= dt;
-    if (rain > 0.5 && this.camp.has('rainCatcher') && (this.rainT -= dt) <= 0) { this.rainT = 25; st.add('water', 1); }
+    if (rain > 0.5 && this.camp.has('rainCatcher') && (this.rainT -= dt) <= 0) { this.rainT = this.camp.has('kiln') ? 12 : 25; st.add('water', 1); }
     if (h >= 20 && h < 22 && this.mealDay !== this.clock.day) {
       this.mealDay = this.clock.day; this.mealT = 45;
       const eaters = this.people.filter(p => !(p.mode === 'scout' || p.mode === 'lost' || p.mode === 'hurt' || p.mode === 'dead'));
       // a cooking spot with someone cooking stretches the food and lifts everyone
       const cooked = this.camp.has('cooking') && this.jobs.cooked; this.jobs.cooked = false;
-      const short = st.meal(Math.ceil(eaters.length * (cooked ? 0.8 : 1)));
+      const short = st.meal(Math.ceil(eaters.length * (cooked ? 0.8 : 1) * (this.camp.has('kiln') ? 0.85 : 1)));
       if (cooked) { for (const p of eaters) this.story.mood(p, 'happy', 40); this.story.log('A proper cooked meal tonight. People actually laughed.'); }
       this.stats.hungry = short;
       this.health.thirsty = st.water <= 0;
@@ -642,9 +661,12 @@ export class Group {
     this.story.log(`Day ${this.day}. Another mark on the wreck.`);
     const st = this.stock, C = this.camp;
     this.health.dawn();
+    this.ideas.dawn();
+    this.village.dawn();
+    if (this.cat.wounded > 0) this.cat.wounded--;
     const wear = this.bodies.wear; for (let i = 0; i < wear.length; i++) wear[i] *= 0.93;
     if (C.has('fishTrap')) st.add('fish', 3);
-    const spoiled = st.spoil(C.has('storage'), C.has('dryingRack'), C.has('smokeRack'));
+    const spoiled = st.spoil(C.has('storage'), C.has('dryingRack'), C.has('smokeRack'), C.has('kiln'));
     // the hide rack turns raw hides into bedding
     if (C.has('hideRack') && st.hides > 0) { st.hides--; st.cured++; }
     if (st.cured > 0) for (const h of C.list) if (h.kind === 'hut' && h.progress >= 1) for (const id of h.owners) this.story.mood(this.people[id], 'happy', 120);

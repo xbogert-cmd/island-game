@@ -17,6 +17,8 @@ export class Cat {
   lair: Pt;
   signs = 0;
   bold = 0;                       // gets bolder after a failed hunt
+  /** nights it stays away, hurt by a spike pit */
+  wounded = 0;
   hunting = false;                // a hunt is on: the lair is marked
   paws: { x: number; z: number; t: number }[] = [];
   private night = -1;
@@ -92,7 +94,7 @@ export class Cat {
 
   private appear() {
     const g = this.g, F = g.fire;
-    if (Math.random() > 0.004 * (1 + this.bold)) return;
+    if (this.wounded > 0 || Math.random() > 0.004 * (1 + this.bold)) return;
     const a = Math.random() * 6.283, r = g.camp.has('fence') ? 24 : 20;
     const q = g.grid.nearest(F.x + Math.cos(a) * r, F.z + Math.sin(a) * r); if (!q) return;
     this.x = q.x; this.z = q.z; this.visible = true; this.eyes = true; this.thinkT = 0;
@@ -186,7 +188,7 @@ export class Cat {
     this.fight = null; this.hunting = false;
     for (const m of g.disc.markers.filter(m => m.text.endsWith('lair'))) g.disc.removeMarker(m);
     const spears = Math.min(g.stock.tools.spear, f.party.length + 1);
-    const odds = 0.3 + spears * 0.1 + f.party.filter(p => has(p.per, 'brave')).length * 0.06 + f.party.length * 0.04 - this.bold * 0.1;
+    const odds = 0.3 + spears * 0.1 + f.party.filter(p => has(p.per, 'brave')).length * 0.06 + f.party.length * 0.04 - this.bold * 0.1 + (this.wounded > 0 ? 0.2 : 0);
     if (Math.random() < odds) {
       this.phase = 'dead'; this.visible = false;
       const hero = f.party.slice().sort((a, b) => (has(b.per, 'brave') ? 1 : 0) - (has(a.per, 'brave') ? 1 : 0))[0];

@@ -25,6 +25,7 @@ requestAnimationFrame(() => setTimeout(() => {
   const g = game.group;
   g.onWhistle = () => audio.whistle();
   g.onAlarm = () => audio.alarm();
+  g.onQuake = (k) => { game.rig.shake = k; audio.alarm(); };
   g.onChime = (big) => audio.chime(big);
   g.onAsk = () => audio.attention();
   g.onSting = (good) => audio.sting(good);

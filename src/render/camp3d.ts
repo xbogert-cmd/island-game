@@ -12,7 +12,7 @@ const M = {
   mud: toon({ color: 0x8a6a48 }), bed: toon({ color: 0x9a8a6a }),
 };
 /** Buildings that are real 3D models (the rest stay sprites). */
-export const SOLID = new Set(['hut', 'storage', 'sickbay', 'sos', 'lookout']);
+export const SOLID = new Set(['hut', 'storage', 'sickbay', 'sos', 'tower', 'canoe']);
 
 const box = (g: THREE.Group, w: number, h: number, d: number, m: THREE.Material, x: number, y: number, z: number, ry = 0) => {
   const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); o.rotation.y = ry; o.castShadow = o.receiveShadow = true; g.add(o); return o;
@@ -84,7 +84,7 @@ function sos(g: THREE.Group): Piece[] {
 }
 
 /** The lookout: four tall posts, a platform, a ladder and a little roof. */
-function lookout(g: THREE.Group): Piece[] {
+function tower(g: THREE.Group): Piece[] {
   const S = 1.5, H = 6.5, out: Piece[] = [];
   for (const [x, z] of [[-S, -S], [S, -S], [-S, S], [S, S]]) out.push({ o: post(g, H + 1.6, x * 0.85, z * 0.85, 0.15), at: 0 });
   const deck = new THREE.Group(); g.add(deck);
@@ -92,13 +92,22 @@ function lookout(g: THREE.Group): Piece[] {
   for (const s of [-1, 1]) { box(deck, S * 2.2, 0.5, 0.08, M.plank, 0, H + 0.45, s * S * 1.1); box(deck, 0.08, 0.5, S * 2.2, M.plank, s * S * 1.1, H + 0.45, 0); }
   for (let i = 0; i < 10; i++) box(deck, 0.8, 0.07, 0.1, M.post, 0, 0.4 + i * 0.62, S * 1.05 + 0.2);
   out.push({ o: deck, at: 0.5 });
-  out.push({ o: roof(g, S * 2.4, S * 2.4, 1.2, H + 1.6), at: 0.8 });
   return out;
 }
 
-const MAKE: Record<string, (g: THREE.Group) => Piece[]> = { hut, storage, sickbay, sos, lookout };
+/** A dugout canoe with two paddles laid across it. */
+function canoe(g: THREE.Group): Piece[] {
+  const hull = new THREE.Group(); g.add(hull);
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 4.2, 10, 1, false, 0, Math.PI), M.post);
+  body.rotation.set(0, 0, Math.PI / 2); body.rotation.order = 'ZXY'; body.rotation.x = Math.PI; body.position.y = 0.5; body.castShadow = body.receiveShadow = true; hull.add(body);
+  box(hull, 3.6, 0.06, 0.7, M.dark, 0, 0.42, 0);
+  for (const [x, r] of [[-0.6, 0.4], [0.7, -0.3]]) box(hull, 0.12, 0.05, 1.6, M.plank, x, 0.62, 0, r);
+  return [{ o: hull, at: 0.34, grow: true }];
+}
+
+const MAKE: Record<string, (g: THREE.Group) => Piece[]> = { hut, storage, sickbay, sos, tower, canoe };
 /** People are small: buildings are modelled roomy, then shrunk to sit right next to them. */
-const SCALE: Record<string, number> = { hut: 0.66, storage: 0.66, sickbay: 0.7, sos: 1, lookout: 0.72 };
+const SCALE: Record<string, number> = { hut: 0.66, storage: 0.66, sickbay: 0.7, sos: 1, tower: 0.72, canoe: 0.75 };
 
 /** Keeps a 3D model in the scene for every solid building, growing as it's built. */
 export class Camp3D {
@@ -120,6 +129,7 @@ export class Camp3D {
         g.scale.setScalar(SCALE[b.kind]);
         e = { g, parts: MAKE[b.kind](g), p: -1 }; this.group.add(g); this.built.set(b.id, e);
       }
+      if (b.kind === 'canoe') { e.g.position.set(b.x, Math.max(heightAt(this.w, b.x, b.z), -0.25) - 0.05, b.z); if (b.rot !== undefined) e.g.rotation.y = b.rot - Math.PI / 2; }
       if (e.p === b.progress) continue;
       e.p = b.progress;
       const shaky = b.shaky && b.progress >= 1 ? 0.06 : 0;

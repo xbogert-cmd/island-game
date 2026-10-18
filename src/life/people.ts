@@ -43,6 +43,10 @@ export interface Person {
   crew: boolean; outAt: number; tripAt: number; outLike: number; tiredN: number; haul: string[];
   /** things from home they carry; the first is their own, the rest were left to them */
   keeps: string[];
+  /** standing on something (the tower platform) */
+  up: number;
+  /** still a child (born on the island) */
+  kid: boolean;
   step: number;
 }
 
@@ -160,7 +164,7 @@ export class Survivors {
         path: [], repath: 0, stuck: 0, moving: false, act: '', actT: Math.random() * 3, ax: x, az: z, partner: null,
         poseO: null, poseT: 0, torch: false, carry: 0, hurt: false, heal: 0, mood: 'none', tmood: 'none', moodT: 0, why: '', apart: 0, apartHit: false, step: 0, ask: false, bring: '', hungry: false,
         job: '', wph: '', wT: 0, xp: {}, love: '', hate: '', pin: '', hateT: 0, sleepIn: false, watched: false, savedBy: -1, health: 0, hungerN: 0,
-        crew: false, outAt: -1e9, tripAt: 0, outLike: 0, tiredN: 0, haul: [], keeps: [],
+        crew: false, outAt: -1e9, tripAt: 0, outLike: 0, tiredN: 0, haul: [], keeps: [], up: 0, kid: false,
       });
     }
   }
@@ -226,7 +230,7 @@ export class Survivors {
         g.fillStyle = '#1c1626'; for (const q of R) g.fillRect(cx + q[0] - 1, FEET + q[1] - 1, q[2] + 2, q[3] + 2);
         for (const q of R) { g.fillStyle = q[4]; g.fillRect(cx + q[0], FEET + q[1], q[2], q[3]); }
       }
-      const h = heightAt(this.w, p.x, p.z), y = h - (SH - FEET) * PX;
+      const h = heightAt(this.w, p.x, p.z) + p.up, y = h - (SH - FEET) * PX;
       // warm light from the fire and nearby torches
       let fl = night * fire.lit * Math.max(0, 1 - Math.hypot(p.x - fire.x, p.z - fire.z) / 9);
       if (p.torch) { fl = Math.max(fl, night * 0.8); torches.push(p); }

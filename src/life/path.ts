@@ -10,14 +10,17 @@ export class WalkGrid {
   h = new Float32Array(M * M);
   cost = new Float32Array(M * M);
 
-  constructor(private w: World) {
+  /** `water`: a grid for the canoe instead: open sea, lagoon and reef, never land. */
+  constructor(private w: World, private water = false) {
     for (let j = 0; j < M; j++) for (let i = 0; i < M; i++) {
       const x = i * G + G / 2, z = j * G + G / 2, k = j * M + i, wi = (z | 0) * N + (x | 0);
-      const h = heightAt(w, x, z);
-      this.h[k] = h;
-      this.ok[k] = h > 0.4 && w.biome[wi] !== B.Lake && w.biome[wi] !== B.Ocean ? 1 : 0;
+      const h = heightAt(w, x, z), b = w.biome[wi];
+      this.h[k] = water ? 0 : h;
+      if (water) { this.ok[k] = h < 0.05 && (b === B.Ocean || b === B.Lagoon || b === B.Reef) && i > 2 && j > 2 && i < M - 3 && j < M - 3 ? 1 : 0; this.cost[k] = 1; continue; }
+      this.ok[k] = h > 0.4 && b !== B.Lake && b !== B.Ocean ? 1 : 0;
       this.cost[k] = 1 + (w.riverDist[wi] < 1.5 ? 3 : 0) + (w.biome[wi] === B.Swamp ? 0.6 : 0);
     }
+    if (water) return;
     for (const l of w.landmarks) {
       if (l.kind === 'hotSpring') this.block(l.x, l.z, l.r * 0.9);
       if (l.kind === 'campfire') this.block(l.x, l.z, 1);
@@ -40,6 +43,21 @@ export class WalkGrid {
     if (!this.walkable(bx, bz)) return false;
     const d = Math.hypot(bx - ax, bz - az) || 1e-6;
     return Math.abs(heightAt(this.w, bx, bz) - heightAt(this.w, ax, az)) / d < MAX_CLIMB / G * 1.25;
+  }
+
+  /** Cells you can walk to from (x,z): the main island, as opposed to islets. */
+  reach(x: number, z: number) {
+    const seen = new Uint8Array(M * M), s = this.cell(x, z); if (s < 0) return seen;
+    const q = [s]; seen[s] = 1;
+    while (q.length) {
+      const c = q.pop()!, ci = c % M, cj = (c / M) | 0;
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        const ni = ci + di, nj = cj + dj; if (ni < 0 || nj < 0 || ni >= M || nj >= M) continue;
+        const n = nj * M + ni; if (seen[n] || !this.ok[n]) continue;
+        seen[n] = 1; q.push(n);
+      }
+    }
+    return seen;
   }
 
   /** Nearest walkable cell centre to (x,z), searching outward in rings. */
@@ -108,7 +126,7 @@ export class WalkGrid {
     let px = ax, pz = az;
     for (let k = 1; k <= n; k++) {
       const x = ax + (bx - ax) * k / n, z = az + (bz - az) * k / n;
-      if (!this.walkable(x, z) || Math.abs(heightAt(this.w, x, z) - heightAt(this.w, px, pz)) > 0.9) return false;
+      if (!this.walkable(x, z) || (!this.water && Math.abs(heightAt(this.w, x, z) - heightAt(this.w, px, pz)) > 0.9)) return false;
       const c = this.cell(x, z); if (this.cost[c] > 2 && this.cost[this.cell(px, pz)] <= 2 && d > 6) return false;   // keep river crossings short
       px = x; pz = z;
     }

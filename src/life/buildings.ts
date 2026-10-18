@@ -4,7 +4,8 @@ import { Mat, MATS } from './stock';
 import type { Group } from './group';
 
 export type BKind = 'hut' | 'storage' | 'workbench' | 'sickbay' | 'cooking' | 'fishTrap' | 'fence' | 'watchFire'
-  | 'dryingRack' | 'rainCatcher' | 'signalFire' | 'beacon' | 'sos' | 'lookout' | 'bath' | 'snares' | 'smokeRack' | 'hideRack' | 'grave';
+  | 'dryingRack' | 'rainCatcher' | 'signalFire' | 'beacon' | 'sos' | 'lookout' | 'bath' | 'snares' | 'smokeRack' | 'hideRack' | 'grave'
+  | 'tower' | 'traps' | 'kiln' | 'garden' | 'canoe' | 'pen' | 'coop';
 
 interface Def { label: string; cost: Partial<Record<Mat, number>>; work: number; desc: string; flat?: boolean; needs?: BKind; many?: boolean }
 
@@ -30,6 +31,14 @@ export const BUILD: Record<BKind, Def> = {
   smokeRack: { label: 'a smoke rack', cost: { wood: 4, vines: 2 }, work: 35, desc: 'Smoked meat keeps for days.' },
   hideRack: { label: 'a hide rack', cost: { wood: 3, vines: 2 }, work: 30, desc: 'Cures hides into bedding. Hut owners sleep better.' },
   grave: { label: 'a grave', cost: {}, work: 1, desc: 'We remember them.', many: true },
+  // the Village era, and what discoveries unlock
+  tower: { label: 'a lookout tower', cost: { wood: 10, vines: 4 }, work: 110, desc: 'Someone up top sees far, spots storms coming and warns about the cat.' },
+  traps: { label: 'spike traps', cost: { wood: 3, bamboo: 4 }, work: 45, desc: 'Pits on the animal trails. Catch boar; might hurt the cat. Watch your step.' },
+  kiln: { label: 'a kiln', cost: { stone: 8, wood: 2 }, work: 60, desc: 'Fires clay pots: stews stretch food, rain fills more, food keeps longer.' },
+  garden: { label: 'a garden', cost: { wood: 2, vines: 1 }, work: 40, desc: 'Fruit and roots grown near camp. Harvest every few days.', flat: true },
+  canoe: { label: 'a canoe', cost: { wood: 6, vines: 2 }, work: 70, desc: 'Fishers bring more back. Click the sea to paddle out yourself.' },
+  pen: { label: 'a goat pen', cost: { wood: 6, vines: 3 }, work: 60, desc: 'Goats: milk every day, and they slowly multiply.' },
+  coop: { label: 'a chicken coop', cost: { bamboo: 4, vines: 2 }, work: 40, desc: 'Eggs every morning.' },
 };
 
 export interface Building {
@@ -41,6 +50,7 @@ export interface Building {
   doubt?: boolean;           // a bad idea: comes out shaky unless someone skilled builds it
   skilled: boolean;          // someone skilled worked on it
   posts?: Pt[];              // fence
+  rot?: number;              // the canoe's heading
 }
 
 const STAGES = 3;
@@ -65,6 +75,7 @@ export class Camp {
     const s = this.site(kind); if (!s) return null;
     const b: Building = { id: this.nid++, kind, x: s.x, z: s.z, progress: 0, paid: 0, owners: [], shaky: false, skilled: false };
     if (kind === 'fence') b.posts = this.fencePosts();
+    if (kind === 'traps') b.posts = this.pits(s);
     this.list.push(b);
     if (front) this.queue.unshift(b); else this.queue.push(b);
     return b;
@@ -161,6 +172,10 @@ export class Camp {
     if (!this.has('snares') && vines) w.push(['snares', 'Snares in the jungle. Meat without chasing it.', 'none']);
     if (!this.has('smokeRack') && (g.stock.tools.spear > 0 || g.stock.food.meat > 0)) w.push(['smokeRack', "Meat rots in a day. A smoke rack would keep it.", 'cook']);
     if (!this.has('hideRack') && g.stock.hides > 0) w.push(['hideRack', 'We have hides. Stretch them on a rack and we can sleep on them.', 'none']);
+    if (g.era === 'village') {
+      if (!this.has('tower')) w.push(['tower', 'A lookout tower. From up there we would see storms coming, and the cat.', 'climber']);
+      if (!this.has('traps') && g.stock.tools.spear > 0) w.push(['traps', 'Spike pits on the animal trails. Boar walk right into them.', 'none']);
+    }
     return w.filter(x => !this.planned(x[0]) || x[0] === 'hut');
   }
 
@@ -222,7 +237,32 @@ export class Camp {
       case 'grave': return this.ring(F.x, F.z, 21, 27, 0.8, land + 2.2 + this.count('grave') * 0.25);
       case 'bath': { const wtr = g.disc.nearestKnown('water', F); return wtr && Math.hypot(wtr.x - F.x, wtr.z - F.z) < 90 ? (g.grid.nearest(wtr.x + 2, wtr.z + 2) ?? wtr) : this.ring(F.x, F.z, 12, 20, 1.2, land); }
       case 'lookout': return g.requests.spot('lookout');
+      case 'tower': return this.high();
+      case 'traps': return this.ring(F.x, F.z, 32, 44, 1.0, land);
+      case 'kiln': return this.ring(F.x, F.z, 7, 12, 1.0, land + 2.0);
+      case 'garden': return this.ring(P.x, P.z, 7, 14, 2.0, Math.atan2(P.z - F.z, P.x - F.x));
+      case 'canoe': return g.shore(14, [g.fishSpot]);
+      case 'pen': return this.ring(F.x, F.z, 16, 22, 2.2, land - 0.8);
+      case 'coop': return this.ring(F.x, F.z, 12, 18, 1.2, land + 0.8);
     }
+  }
+
+  /** The highest clear ground near camp: where the tower goes. */
+  private high(): Pt | null {
+    const g = this.g, F = g.fire; let best: Pt | null = null, bh = -1e9;
+    for (let k = 0; k < 500; k++) {
+      const a = k * 2.399, r = 14 + (k % 30), x = F.x + Math.cos(a) * r, z = F.z + Math.sin(a) * r;
+      if (!this.clear(x, z, 1.6)) continue;
+      const h = heightAt(g.w, x, z) - r * 0.04;
+      if (h > bh) { bh = h; best = { x, z }; }
+    }
+    return best;
+  }
+  /** Three pits spread along the trail at the jungle edge. */
+  private pits(c: Pt): Pt[] {
+    const g = this.g, F = g.fire, a = Math.atan2(c.z - F.z, c.x - F.x), out: Pt[] = [];
+    for (const da of [-0.22, 0, 0.22]) { const r = Math.hypot(c.x - F.x, c.z - F.z), q = g.grid.nearest(F.x + Math.cos(a + da) * r, F.z + Math.sin(a + da) * r); if (q) out.push(q); }
+    return out;
   }
 
   /** Fence posts on a ring round camp, with a gate toward the sea. */

@@ -21,6 +21,8 @@ export class Weather {
   wet = 0; fog = 0; rainbow = 0;
   /** Set from the settings panel to hold one weather state. */
   locked: WeatherKind | null = null;
+  /** Held by the game itself (a storm-season storm). The settings lock wins. */
+  forced: WeatherKind | null = null;
   private timer = 200;
   private wasRaining = false;
 
@@ -28,7 +30,7 @@ export class Weather {
 
   update(dt: number, hour: number) {
     this.timer -= dt;
-    if (this.locked) { this.kind = this.locked; this.timer = 999; }
+    if (this.locked || this.forced) { this.kind = this.locked ?? this.forced!; this.timer = 999; }
     if (this.timer <= 0) {
       let r = Math.random();
       for (const [k, p] of NEXT[this.kind]) { r -= p; if (r <= 0) { this.kind = k; break; } }

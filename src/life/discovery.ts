@@ -4,7 +4,7 @@ import { WalkGrid } from './path';
 import { Person, Pt } from './people';
 import type { Mat } from './stock';
 
-export type PoiKind = LandmarkKind | 'water' | 'food' | 'waterfall' | 'crater' | 'clue' | 'material';
+export type PoiKind = LandmarkKind | 'water' | 'food' | 'waterfall' | 'crater' | 'clue' | 'material' | 'islet' | 'reef';
 export interface Poi {
   id: number; kind: PoiKind; x: number; z: number;
   sight: number;           // how far away it can be noticed
@@ -17,6 +17,7 @@ export interface Poi {
   note?: string;           // something found there (journal + next clue)
   next?: number;           // poi id the note points to
   mat?: Mat;               // material sources
+  loot?: string;           // islets and the reef: something to bring back, once
 }
 export interface Marker { id: number; x: number; z: number; r: number; kind: '?' | '!'; text: string; poi: Poi | null; who: Person | null; fake: boolean }
 
@@ -24,12 +25,12 @@ const NAMES: Partial<Record<PoiKind, string[]>> = {
   tail: ['The Tail', 'Broken Tail', 'Tail Hollow'], engine: ['Engine Rest', 'Dead Engine'], ruins: ['The Old Stones', 'Stone Court', 'Temple of Vines'],
   shipwreck: ['Barnacle Hull', "The Captain's Grave", 'Old Bones Wreck'], abandonedCamp: ['Lost Camp', 'The First Camp', 'Ghost Camp'],
   radioTower: ['Rust Tower', 'Signal Hill', 'The Antenna'], giantTree: ['The Elder Tree', 'Grandfather Tree', 'Skyroot'], hotSpring: ['Warm Pools', 'The Kettles', 'Steam Baths'],
-  cave: ['Echo Cave', 'The Dark Mouth', 'Bat Hollow'], crater: ['Sky Lake', 'The Bowl', 'Crater Lake'], waterfall: ['{N} Falls', 'Thunder Falls', 'Misty Falls'],
+  cave: ['Echo Cave', 'The Dark Mouth', 'Bat Hollow'], islet: ['Gull Rock', 'Little Sister', 'Lonely Isle', 'Turtle Key'], reef: ['Clam Gardens', 'The Shallows', 'Pearl Reef'], crater: ['Sky Lake', 'The Bowl', 'Crater Lake'], waterfall: ['{N} Falls', 'Thunder Falls', 'Misty Falls'],
 };
 const TITLE: Partial<Record<PoiKind, [string, string]>> = {
   tail: ['THE TAIL SECTION', 'the tail section'], engine: ['THE ENGINE', 'the engine'], ruins: ['THE RUINS', 'the ruins'], shipwreck: ['THE SHIPWRECK', 'the old shipwreck'],
   abandonedCamp: ['AN ABANDONED CAMP', 'the abandoned camp'], radioTower: ['THE RADIO TOWER', 'the radio tower'], giantTree: ['THE GIANT TREE', 'the giant tree'],
-  hotSpring: ['THE HOT SPRINGS', 'the hot springs'], cave: ['A CAVE', 'a cave'], crater: ['THE CRATER LAKE', 'the crater lake'], waterfall: ['A WATERFALL', 'the waterfall'],
+  hotSpring: ['THE HOT SPRINGS', 'the hot springs'], islet: ['AN ISLET', 'a little island'], reef: ['GIANT CLAMS', 'giant clams on the reef'], cave: ['A CAVE', 'a cave'], crater: ['THE CRATER LAKE', 'the crater lake'], waterfall: ['A WATERFALL', 'the waterfall'],
 };
 export const MAP = 192;
 
@@ -147,6 +148,13 @@ export class Discovery {
   }
   dropMarkersFor(p: Poi) { this.markers = this.markers.filter(m => m.poi !== p); }
   removeMarker(m: Marker) { this.markers = this.markers.filter(x => x !== m); }
+  /** Something added after the island was made (islets, the reef). */
+  addPoi(kind: PoiKind, x: number, z: number, sight: number, major: boolean, extra: Partial<Poi> = {}) {
+    const t = TITLE[kind] ?? ['', kind];
+    const p: Poi = { id: this.pois.length, kind, x, z, sight, major, label: t[1], title: t[0], name: null, known: false, ...extra };
+    this.pois.push(p); return p;
+  }
+
   nearestKnown(kind: PoiKind, from: Pt) {
     let b: Poi | null = null, bd = 1e9;
     for (const p of this.pois) if (p.known && p.kind === kind) { const d = Math.hypot(p.x - from.x, p.z - from.z); if (d < bd) { bd = d; b = p; } }

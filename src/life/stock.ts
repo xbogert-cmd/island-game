@@ -15,6 +15,8 @@ export class Stock {
   tools: Record<Tool, number> = { knife: 0, axe: 0, spear: 0, basket: 0, rope: 0 };
   toolKnown = new Set<Tool>();
   hides = 0; cured = 0;
+  /** healing plants from the jungle */
+  herbs = 0;
   water = 16;            // the plane's bottles, then jugs from the river
   stolen = 0;            // hidden away by a hoarder
   ration = 0;            // days of half portions left
@@ -30,8 +32,9 @@ export class Stock {
 
   get totalFood() { let n = 0; for (const f of FOODS) n += this.food[f]; return n; }
 
-  add(kind: Food | 'water' | Mat, n: number) {
-    if (kind === 'water') { this.water += n; this.today.water += n; }
+  add(kind: Food | 'water' | Mat | 'herbs', n: number) {
+    if (kind === 'herbs') this.herbs += n;
+    else if (kind === 'water') { this.water += n; this.today.water += n; }
     else if (kind in this.mat) this.mat[kind as Mat] += n;
     else { this.food[kind as Food] += n; this.today.food += n; }
   }
@@ -60,8 +63,8 @@ export class Stock {
   }
 
   /** Each dawn fresh food goes off a little. Storage halves it; a drying rack keeps fish. */
-  spoil(storage: boolean, rack: boolean, smoke = false) {
-    const k = storage ? 0.5 : 1; let lost = 0;
+  spoil(storage: boolean, rack: boolean, smoke = false, pots = false) {
+    const k = (storage ? 0.5 : 1) * (pots ? 0.6 : 1); let lost = 0;
     for (const [f, r] of [['fruit', 0.25], ['shell', 0.3], ['fish', rack ? 0.06 : 0.35], ['meat', smoke ? 0.05 : 0.4]] as [Food, number][]) { const n = Math.floor(this.food[f] * r * k); this.food[f] -= n; lost += n; }
     return lost;
   }

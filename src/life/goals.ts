@@ -7,7 +7,7 @@ import type { Group } from './group';
 
 const pickOf = <T,>(a: T[]) => a[(Math.random() * a.length) | 0];
 
-export type GoalKind = 'explore' | 'food' | 'water' | 'rest' | 'build' | 'salvage' | 'mend' | 'search' | 'hunt';
+export type GoalKind = 'explore' | 'food' | 'water' | 'rest' | 'build' | 'salvage' | 'mend' | 'search' | 'hunt' | 'prepare';
 export interface GoalOpt { kind: GoalKind; who: Person; title: string; line: string; x?: number; z?: number; prop?: BKind; a?: Person; b?: Person }
 
 /** The group's plan for the day: three people pitch at dawn, you pick one (or the most trusted wins). */
@@ -78,6 +78,8 @@ export class Goals {
     };
     const cands: (() => GoalOpt | null)[] = [];
     const n = g.people.length, low = (v: number) => v < n * 0.8;
+    // a storm on the way beats everything
+    if (g.village.stormSoon()) cands.push(() => { const w = pitcher(['calm', 'hardworking'], 'builder'); return w && { kind: 'prepare', who: w, title: 'PREPARE FOR THE STORM', line: g.village.stormIn === 0 ? "It's coming today. Tie everything down, get the food under cover." : "The storm hits tomorrow. Let's tie everything down today." }; });
     // someone missing comes first
     const missing = g.people.find(p => (p.mode === 'lost' || p.mode === 'hurt') && g.disc.markers.some(m => m.who === p));
     if (missing) cands.push(() => { const w = pitcher(['kind', 'brave'], undefined, []); return w && { kind: 'search', who: w, a: missing, title: `FIND ${missing.per.name.toUpperCase()}`, line: `${missing.per.name} is still out there. Nothing else matters today.` }; });
@@ -155,6 +157,7 @@ export class Goals {
         break;
       }
       case 'hunt': g.cat.startHunt(); S.say(o.who, 'Spears, everyone. Stay together.'); break;
+      case 'prepare': g.village.prepare(o.who); S.say(o.who, 'Ropes on every roof! Food under cover!'); break;
       case 'search': for (const p of g.people) if (p.mode === 'camp' && Math.random() < 0.4) S.say(p, 'Hang on. We\'re coming.'); break;
     }
   }
@@ -172,6 +175,7 @@ export class Goals {
       case 'salvage': met = g.requests.wreckDone; text = met ? 'The wreck gave us what it had.' : 'The wreck gave us nothing.'; break;
       case 'mend': { const a = o.a!, b = o.b!; S.addRel(a, b, 15); S.say(a, `Okay, ${b.per.name}. We're good.`); text = `${a.per.name} and ${b.per.name} made peace. For now.`; break; }
       case 'hunt': met = g.cat.phase === 'dead'; text = met ? `${g.cat.name || 'The cat'} is dead.` : `${g.cat.name || 'The cat'} is still out there.`; break;
+      case 'prepare': text = 'Everything is tied down. Let it come.'; break;
       case 'search': met = !(o.a!.mode === 'lost' || o.a!.mode === 'hurt'); text = met ? `${o.a!.per.name} is safe.` : `${o.a!.per.name} is still out there.`; break;
     }
     S.toast(`Today's plan: ${text}`, met ? 'good' : 'bad', o.who);

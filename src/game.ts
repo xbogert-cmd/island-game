@@ -143,6 +143,11 @@ export class Game {
     for (const s of this.props.steam) if (near(s.x, s.z) && Math.random() < dt * s.rate) {
       P.emit(Math.random() < 0.5 ? 'puff' : 'puff6', s.x + (Math.random() - 0.5) * 1.5, s.y, s.z + (Math.random() - 0.5) * 1.5, { vy: 1 + Math.random(), vx: U.uWindDir.value.x * (0.3 + wx.wind * 2), vz: U.uWindDir.value.y * (0.3 + wx.wind * 2), max: 3 + Math.random() * 2, r: 0.95, g: 0.97, b: 1, a: 0.55 });
     }
+    // the volcano waking: a smoke plume that thickens day by day
+    const rum = this.group.village.rumble, V = this.world.volcano;
+    if (rum > 0 && Math.abs(V.x - t.x) < this.viewR * 2.5 && Math.abs(V.z - t.z) < this.viewR * 2.5 && Math.random() < dt * rum * 0.6) {
+      P.emit(Math.random() < 0.5 ? 'puff' : 'puff6', V.x + (Math.random() - 0.5) * 4, heightAt(this.world, V.x, V.z) + 3, V.z + (Math.random() - 0.5) * 4, { vy: 2 + Math.random() * 2, vx: U.uWindDir.value.x * (0.6 + wx.wind * 3), vz: U.uWindDir.value.y * (0.6 + wx.wind * 3), max: 6 + Math.random() * 4, r: 0.55, g: 0.55, b: 0.58, a: 0.6 });
+    }
     for (const f of this.falls) if (near(f.x, f.z) && Math.random() < dt * 14) {
       P.emit('dot2', f.x + (Math.random() - 0.5) * 2, f.y + 0.1, f.z + (Math.random() - 0.5) * 2, { vy: 1.5 + Math.random() * 2, vx: (Math.random() - 0.5) * 2, vz: (Math.random() - 0.5) * 2, grav: 7, max: 0.6, r: 0.92, g: 0.97, b: 1 });
       if (Math.random() < 0.3) P.emit('puff', f.x, f.y + 0.4, f.z, { vy: 0.6, max: 1.5, a: 0.4 });
@@ -253,6 +258,10 @@ export class Game {
     for (const bd of g.camp.list) {
       if (!near(bd.x, bd.z)) continue;
       const gy = heightAt(w, bd.x, bd.z);
+      if (bd.kind === 'traps') {
+        for (const q of bd.posts ?? []) if (bd.progress >= 1) b.push(q.x, heightAt(w, q.x, q.z) + 0.04, q.z, ATLAS.pit[0], false, 1, 1, 1, 1, true); else b.push(q.x, heightAt(w, q.x, q.z) - 0.05, q.z, ATLAS.stakes[0]);
+        continue;
+      }
       if (bd.kind === 'fence') {
         const posts = bd.posts ?? [], n = Math.floor(bd.progress * posts.length);
         posts.forEach((q, i) => { if (i < n) b.push(q.x, heightAt(w, q.x, q.z) - 0.05, q.z, ATLAS.fencePost[0]); else if (i < n + 3 && bd.progress > 0) b.push(q.x, heightAt(w, q.x, q.z) - 0.05, q.z, ATLAS.stakes[0]); });

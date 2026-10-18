@@ -32,7 +32,7 @@ export class Crew {
   outside(x: number, z: number, r = CAMP_R) { return Math.hypot(x - this.g.fire.x, z - this.g.fire.z) > r; }
 
   update(dt: number) {
-    const L = this.g.leader; if (!L) return;
+    const L = this.g.leader; if (!L || this.g.canoe.trip) return;
     if (!this.out) { if (this.outside(L.x, L.z)) { this.out = true; this.setOff(); } return; }
     // a little slack, so walking along the edge doesn't flip it back and forth
     if (!this.outside(L.x, L.z, CAMP_R - 4)) { if ((this.homeT += dt) > 2) { this.out = false; this.homeT = 0; this.home(); } }

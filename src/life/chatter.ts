@@ -84,6 +84,9 @@ export class Chatter {
     if (C.phase === 'signs' && C.signs > 0) out.push('Something has been circling the camp at night.');
     if (this.legend) out.push(`Tell it again, how ${this.legend}.`);
     if (g.stock.tools.axe > 0) out.push('That axe changed everything.');
+    if (g.village.rumble > 2) out.push('Is the smoke on the mountain getting thicker?', "If that mountain goes, where do we even run?");
+    if (g.village.name) out.push(`${g.village.name}. I like saying it.`, `Who'd have thought, a village. ${g.village.name}.`);
+    const tr = g.ideas.trying(); if (tr) out.push(`Any luck with the ${tr === 'herbs' ? 'plants' : tr}?`, "If this experiment works, it'll change everything.");
     if (!out.length) return null;
     const t = pickOf(out);
     if (t.includes('cat') || (C.name && t.includes(C.name))) g.story.mood(sp, 'scared', 10);

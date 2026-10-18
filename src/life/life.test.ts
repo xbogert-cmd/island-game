@@ -9,6 +9,8 @@ import { BUILD, BKind, stageCost } from './buildings';
 import type { Person } from './people';
 import { Health } from './health';
 import { Crew } from './crew';
+import { Ideas } from './ideas';
+import { Village } from './village';
 
 function flatWorld(): World {
   const h = new Float32Array(N * N).fill(2), biome = new Uint8Array(N * N).fill(B.Grass);
@@ -148,7 +150,7 @@ describe('health', () => {
   it('never skips the warning stages: one step per dawn, death only from very sick', () => {
     const noop = () => {};
     const p = { id: 0, per: { name: 'Test', skill: 'none', traits: [] }, mode: 'camp', health: 0, hungerN: 0, hungry: true, hurt: false, x: 0, z: 0 } as unknown as Person;
-    const g = { people: [p], camp: { has: () => false, get: () => null }, stats: { spoiled: 0 }, goals: { active: () => false },
+    const g = { people: [p], camp: { has: () => false, get: () => null }, stats: { spoiled: 0 }, goals: { active: () => false }, stock: { herbs: 0 }, ideas: { done: () => false },
       story: { toast: noop, log: noop, say: noop, mood: noop, trustAll: noop, rel: () => 0 }, onAlarm: noop, hint: noop, onSting: noop };
     const H = new Health(g as unknown as ConstructorParameters<typeof Health>[0]);
     const seen: number[] = [];
@@ -157,5 +159,40 @@ describe('health', () => {
     for (let d = 0; d < 40 && p.mode !== 'dead'; d++) { const before = p.health; H.dawn(); seen.push(p.health); expect(p.health - before).toBeLessThanOrEqual(1); }
     expect(seen).toContain(1); expect(seen).toContain(2); expect(seen).toContain(3);
     if (diedAt >= 0) expect(diedAt).toBe(3);
+  });
+});
+
+describe('village (4a)', () => {
+  const villager = (hut: boolean, extra = {}) => ({ mode: 'camp', kid: false, health: 0, hut, ...extra });
+  const village = (o: { people: { hut: boolean; health?: number }[]; food: number; cat: string; fence?: boolean }) => {
+    const V = Object.create(Village.prototype) as Village;
+    (V as unknown as { g: unknown }).g = {
+      people: o.people, stock: { totalFood: o.food }, cat: { phase: o.cat },
+      camp: { hutOf: (_id: number) => null, has: () => !!o.fence },
+    };
+    // hutOf by identity: the test people carry their own flag
+    (V as unknown as { g: { camp: { hutOf: unknown } } }).g.camp.hutOf = (id: number) => (o.people[id] as { hut: boolean }).hut || null;
+    o.people.forEach((p, i) => Object.assign(p, { id: i }));
+    return V;
+  };
+  it('is ready only when everyone has a roof, food is not low, nobody is dying and the cat is handled', () => {
+    expect(village({ people: [villager(true), villager(true)], food: 10, cat: 'none' }).ready()).toBe(true);
+    expect(village({ people: [villager(true), villager(false)], food: 10, cat: 'none' }).ready()).toBe(false);
+    expect(village({ people: [villager(true), villager(true)], food: 0, cat: 'none' }).ready()).toBe(false);
+    expect(village({ people: [villager(true), villager(true, { health: 3 })], food: 10, cat: 'none' }).ready()).toBe(false);
+    expect(village({ people: [villager(true), villager(true)], food: 10, cat: 'stalk' }).ready()).toBe(false);
+    expect(village({ people: [villager(true), villager(true)], food: 10, cat: 'stalk', fence: true }).ready()).toBe(true);
+  });
+  it('experiments move Trying → Getting closer → Almost', () => {
+    const I = new Ideas({} as never);
+    expect([0.1, 0.5, 0.8].map(v => { I.s.pottery.prog = v; return I.stage('pottery'); })).toEqual(['Trying', 'Getting closer', 'Almost']);
+  });
+  it('the canoe only ever paddles on water', () => {
+    const w = flatWorld(), W = new WalkGrid(w, true);
+    expect(W.walkable(120, 300)).toBe(true);
+    expect(W.walkable(200, 300)).toBe(false);
+    const path = W.find(110, 220, 130, 580);
+    expect(path.length).toBeGreaterThan(0);
+    for (const q of path) expect(W.walkable(q.x, q.z)).toBe(true);
   });
 });

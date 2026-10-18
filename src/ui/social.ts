@@ -5,7 +5,9 @@ import { SECRET_LABEL, SKILL_LABEL, trustWord } from '../life/persona';
 import { PARTY_MAX } from '../life/group';
 import { dirName } from '../life/scouting';
 import { Input } from './input';
-import { load, saveInfo } from '../life/save';
+import { load, save, saveInfo, stopSaving } from '../life/save';
+import { IDEAS, INFO, IdeaKind } from '../life/ideas';
+import type { Naming } from '../life/village';
 import { objectives } from '../life/objectives';
 import { JOB, JOB_KINDS, JobKind, LEVEL_WORD, PRIO_WORD, level } from '../life/jobs';
 import { BUILD } from '../life/buildings';
@@ -64,7 +66,7 @@ const CSS = `
 @keyframes pgin2 { from { opacity: 0; transform: translate(-50%, -48%); } to { opacity: 1; transform: translate(-50%, -50%); } }
 .panel h4 { font: 500 15px var(--hd); letter-spacing: 2.5px; margin: 0 0 10px; color: var(--gold); }
 .panel h4 span { font: 400 14px var(--tx); color: var(--dim); letter-spacing: 0; }
-#roster { left: 50%; top: 50%; right: auto; transform: translate(-50%, -50%); width: min(1080px, 94vw); max-height: 84vh; padding: 18px 22px; z-index: 8; border-left: 3px solid var(--gold); box-shadow: 0 6px 30px #0008; }
+#roster { background: #232624f7; left: 50%; top: 50%; right: auto; transform: translate(-50%, -50%); width: min(1080px, 94vw); max-height: 84vh; padding: 18px 22px; z-index: 8; border-left: 3px solid var(--gold); box-shadow: 0 6px 30px #0008; }
 #roster .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 8px; }
 #roster .r { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; background: var(--sl2); border-radius: 2px; border-left: 2px solid transparent; cursor: pointer; line-height: 1.4; font-size: 14px; }
 #roster .r:hover { border-left-color: var(--gold); background: var(--sl3); }
@@ -74,7 +76,7 @@ const CSS = `
 #roster .ra { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
 #roster .ra button { font-size: 11px; padding: 4px 8px; letter-spacing: 1px; background: var(--sl); }
 #roster .ra button.on { color: var(--sea); border-bottom-color: var(--sea); }
-#journal { left: 50%; top: 50%; right: auto; transform: translate(-50%, -50%); width: min(840px, 94vw); max-height: 90vh; padding: 18px 22px; z-index: 8; border-left: 3px solid var(--gold); box-shadow: 0 6px 30px #0008; }
+#journal { background: #232624f7; left: 50%; top: 50%; right: auto; transform: translate(-50%, -50%); width: min(840px, 94vw); max-height: 90vh; padding: 18px 22px; z-index: 8; border-left: 3px solid var(--gold); box-shadow: 0 6px 30px #0008; }
 #journal .d { font: 500 13px var(--hd); letter-spacing: 2px; color: var(--gold); margin-top: 12px; }
 #journal p { margin: 2px 0 6px; }
 #journal .jl { max-height: 66vh; overflow-y: auto; }
@@ -135,6 +137,23 @@ const CSS = `
 #today .ob { cursor: default; padding: 1px 0 1px 14px; text-indent: -14px; }
 #today .ob.at { cursor: pointer; } #today .ob.at:hover { color: var(--gold); }
 #today .ob.done { color: var(--ok); }
+#naming { left: 50%; top: 30%; transform: translateX(-50%); padding: 16px 20px; display: none; flex-direction: column; gap: 10px; align-items: center; border-top: 3px solid var(--gold); z-index: 10; box-shadow: 0 6px 30px #000a; background: #252826; }
+#naming.open { display: flex; animation: tin .2s ease-out; }
+#naming h3 { font: 500 18px var(--hd); letter-spacing: 3px; color: var(--gold); margin: 0; }
+#naming .sg { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 520px; }
+#naming .sg button { text-transform: none; font: 15px var(--tx); letter-spacing: 0; }
+#naming .row { display: flex; gap: 8px; }
+#naming input { font: 17px var(--tx); background: var(--sl2); color: var(--ink); border: 1px solid var(--ln); border-radius: 2px; padding: 7px 9px; width: 260px; }
+#overview { background: #232624f7; left: 50%; top: 50%; right: auto; transform: translate(-50%, -50%); width: min(980px, 94vw); max-height: 86vh; padding: 18px 22px; z-index: 8; border-left: 3px solid var(--gold); box-shadow: 0 6px 30px #0008; }
+#overview .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 6px 24px; }
+#overview h5 { font: 500 13px var(--hd); letter-spacing: 2px; color: var(--gold); margin: 12px 0 4px; }
+#overview .ln { padding: 2px 0; border-bottom: 1px solid #ffffff0d; }
+#overview .x { position: absolute; right: 16px; top: 14px; }
+#pause { inset: 0; z-index: 20; background: #0b0d0cb8; display: none; align-items: center; justify-content: center; }
+#pause.open { display: flex; }
+#pause .box { padding: 24px 30px; display: flex; flex-direction: column; gap: 8px; min-width: 260px; border-left: 3px solid var(--gold); background: #252826; }
+#pause h2 { font: 500 24px var(--hd); letter-spacing: 6px; margin: 0 0 8px; text-align: center; }
+#pause button { font-size: 15px; padding: 10px 14px; }
 `;
 
 const ic = (n: string, c = '') => `<i class="ti ti-${n}"${c ? ` style="color:${c}"` : ''}></i>`;
@@ -146,6 +165,7 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 export class Social {
   private el = (html: string, parent: HTMLElement = document.body) => { const d = document.createElement('div'); d.innerHTML = html.trim(); const e = d.firstElementChild as HTMLElement; parent.appendChild(e); e.addEventListener('pointerdown', ev => ev.stopPropagation()); return e; };
   private lead: HTMLElement; private card: HTMLElement; private roster: HTMLElement; private journal: HTMLElement;
+  private overview: HTMLElement; private namingEl: HTMLElement; private naming = false; private pauseEl: HTMLElement; private pausedAt = -1; private ovKey = '';
   private toastsEl: HTMLElement; private tip: HTMLElement; private title: HTMLElement; private nameBox: HTMLElement;
   private bubbles = new Map<object, HTMLElement>();
   private labels = new Map<string, HTMLElement>();
@@ -159,7 +179,7 @@ export class Social {
 
   constructor(private game: Game, private input: Input) {
     const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
-    this.lead = this.el(`<div id="lead" class="so"><div class="me box"><canvas width="${SW}" height="${SH}"></canvas><div><div class="nm"></div><div class="sub"></div></div></div><div class="cm"><button data-m="alone" title="Go out on your own">ALONE</button><button data-m="crew" title="Your picks, filled out by the camp">CREW</button><button data-m="all" title="Everyone who can comes">ALL</button></div><div class="party box"></div><div class="btns"><button data-a="roster"><i class="ti ti-users"></i> PEOPLE</button><button data-a="journal"><i class="ti ti-map"></i> ISLAND</button></div></div>`);
+    this.lead = this.el(`<div id="lead" class="so"><div class="me box"><canvas width="${SW}" height="${SH}"></canvas><div><div class="nm"></div><div class="sub"></div></div></div><div class="cm"><button data-m="alone" title="Go out on your own">ALONE</button><button data-m="crew" title="Your picks, filled out by the camp">CREW</button><button data-m="all" title="Everyone who can comes">ALL</button></div><div class="party box"></div><div class="btns"><button data-a="roster"><i class="ti ti-users"></i> PEOPLE</button><button data-a="journal"><i class="ti ti-map"></i> ISLAND</button><button data-a="overview"><i class="ti ti-building-community"></i> CAMP</button></div></div>`);
     this.card = this.el('<div id="card" class="so box"></div>');
     this.roster = this.el('<div id="roster" class="so box panel"></div>');
     this.journal = this.el('<div id="journal" class="so box panel"></div>');
@@ -180,10 +200,29 @@ export class Social {
     });
     this.lead.style.display = 'none';
     (this.lead.querySelector('.me') as HTMLElement).onclick = () => { game.camWho = null; game.rig.followOn = true; };
-    this.lead.querySelectorAll('.btns button').forEach(b => (b as HTMLElement).onclick = () => this.toggle((b as HTMLElement).dataset.a === 'roster' ? this.roster : this.journal));
+    this.overview = this.el('<div id="overview" class="so box panel"></div>');
+    this.overview.addEventListener('click', e => { if ((e.target as HTMLElement).closest('.x')) this.overview.classList.remove('open'); });
+    this.namingEl = this.el('<div id="naming" class="so box"></div>');
+    this.pauseEl = this.el(`<div id="pause" class="so"><div class="box"><h2>PAUSED</h2><button data-p="resume" class="go">${ic('player-play')} RESUME</button><button data-p="save">${ic('device-floppy')} SAVE</button><button data-p="help">${ic('help')} HELP</button><button data-p="settings">${ic('settings')} SETTINGS</button><button data-p="quit">${ic('door-exit')} QUIT TO TITLE</button></div></div>`);
+    this.pauseEl.addEventListener('click', e => {
+      const b = (e.target as HTMLElement).closest('[data-p]') as HTMLElement | null; if (!b) { if (e.target === this.pauseEl) this.pause(false); return; }
+      const a = b.dataset.p;
+      if (a === 'resume') this.pause(false);
+      if (a === 'save') { save(game); this.toast('Saved.', 'good'); }
+      if (a === 'help') { this.pause(false); (document.querySelector('[data-b="help"]') as HTMLElement)?.click(); }
+      if (a === 'settings') { this.pause(false); (document.querySelector('#gear') as HTMLElement)?.click(); }
+      if (a === 'quit') { save(game); stopSaving(); location.reload(); }
+    });
+    this.lead.querySelectorAll('.btns button').forEach(b => (b as HTMLElement).onclick = () => { const a = (b as HTMLElement).dataset.a; this.toggle(a === 'roster' ? this.roster : a === 'journal' ? this.journal : this.overview); });
     this.lead.querySelectorAll('.cm button').forEach(b => (b as HTMLElement).onclick = () => { game.group.crew.setMode((b as HTMLElement).dataset.m as 'alone'); this.partyKey = ''; this.refreshT = 0; });
     input.onPerson = (p) => this.openCard(p);
-    addEventListener('keydown', e => { if (e.key === 'Escape') { this.closeCard(); this.roster.classList.remove('open'); this.journal.classList.remove('open'); game.group.scoutPick = null; } });
+    addEventListener('keydown', e => {
+      if (e.key !== 'Escape' || this.naming) return;
+      const busy = this.card.classList.contains('open') || [this.roster, this.journal, this.overview].some(x => x.classList.contains('open')) || !!document.querySelector('.page.open, #panel.open') || this.askOpen || !!game.group.scoutPick;
+      if (this.pauseEl.classList.contains('open')) this.pause(false);
+      else if (busy) { this.closeCard(); for (const x of [this.roster, this.journal, this.overview]) x.classList.remove('open'); this.askOpen = false; game.group.scoutPick = null; }
+      else if (game.group.leader) this.pause(true);
+    });
     this.pickScreen();
   }
 
@@ -215,7 +254,13 @@ export class Social {
     for (const q of R) { g.fillStyle = q[4]; g.fillRect(cx + q[0], FEET + q[1], q[2], q[3]); }
     return c;
   }
-  private toggle(e: HTMLElement) { const o = !e.classList.contains('open'); this.roster.classList.remove('open'); this.journal.classList.remove('open'); if (o) { e.classList.add('open'); this.journalN = -1; this.rosterKey = ''; this.refreshT = 0; this.mapT = 0; } }
+  /** Esc: everything stops and the world dims. */
+  private pause(on: boolean) {
+    const c = this.game.clock;
+    if (on) { this.pausedAt = c.speed; c.speed = 0; this.pauseEl.classList.add('open'); }
+    else { if (this.pausedAt >= 0) c.speed = this.pausedAt || 1; this.pausedAt = -1; this.pauseEl.classList.remove('open'); document.querySelectorAll('#speed button').forEach(b => b.classList.toggle('on', Number((b as HTMLElement).dataset.s) === c.speed)); }
+  }
+  private toggle(e: HTMLElement) { const o = !e.classList.contains('open'); for (const x of [this.roster, this.journal, this.overview]) x.classList.remove('open'); if (o) { this.ovKey = ''; e.classList.add('open'); this.journalN = -1; this.rosterKey = ''; this.refreshT = 0; this.mapT = 0; } }
 
   /** Tabs, priorities, the build queue, the map: all clicks inside the two big pages. */
   private pageClick(e: MouseEvent) {
@@ -234,8 +279,8 @@ export class Social {
     if (q) { const b = g.camp.queue.find(x => x.id === Number(q.dataset.q)); if (b) g.camp.toFront(b); this.rosterKey = ''; this.fillRoster(); return; }
     if (t.tagName === 'CANVAS' && t.closest('.wrap')) {
       const r = t.getBoundingClientRect(), x = ((e.clientX - r.left) / r.width) * N, z = ((e.clientY - r.top) / r.height) * N;
-      if (g.scoutPick) g.clickGround(x, z); else { this.game.rig.jumpTo(x, z); this.game.rig.followOn = false; }
-      this.journal.classList.remove('open');
+      // the map stays open: the view moves underneath it
+      if (g.scoutPick) { g.clickGround(x, z); this.journal.classList.remove('open'); } else { this.game.rig.jumpTo(x, z); this.game.rig.followOn = false; }
     }
   }
   /** Camera to someone: a quick look at camp, or ride along with someone out there. */
@@ -328,6 +373,7 @@ export class Social {
     if (!g.scoutPick && this.tipT > 50) this.tipT = 0.01;
     if (this.momentT > 0) { if ((this.momentT -= dt) <= 0) this.title.style.opacity = '0'; } else if (g.moments.length) this.moment();
     else if (g.eraCards.length) { const c = g.eraCards.shift()!; this.title.innerHTML = `${c.title}<span class="sub">${c.sub}</span>`; this.title.style.opacity = '1'; this.momentT = 5; }
+    if (!this.naming && g.village.namings.length) this.nameIt(g.village.namings.shift()!);
     this.drawBubbles();
     this.drawLabels();
     this.drawAsk();
@@ -358,6 +404,7 @@ export class Social {
     if (pk !== this.partyKey) this.fillParty(party, list, pk);
     if (this.cardP && this.card.classList.contains('open')) this.fillCard();
     if (this.roster.classList.contains('open')) this.fillRoster();
+    if (this.overview.classList.contains('open')) this.fillOverview();
     if (this.journal.classList.contains('open') && (this.islandTab === 'map' ? (this.mapT -= 0.5) <= 0 : this.journalN !== S.journal.length)) { this.mapT = 1; this.fillJournal(); }
     const pb = this.lead.querySelector('[data-a="roster"]') as HTMLElement, ph = `${ic('users')} PEOPLE${g.jobs.fresh ? '<span class="tag">NEW</span>' : ''}`;
     if (pb.innerHTML !== ph) pb.innerHTML = ph;
@@ -452,6 +499,72 @@ export class Social {
     return `<div class="tabs"><button data-t="roster" class="${this.peopleTab === 'roster' ? 'on' : ''}">ROSTER</button><button data-t="jobs" class="${this.peopleTab === 'jobs' ? 'on' : ''}">JOBS${g.jobs.fresh ? '<span class="tag">NEW</span>' : ''}</button></div>`;
   }
 
+  private ideaLine(k: IdeaKind) {
+    const g = this.game.group, I = g.ideas.s[k], f = INFO[k], who = g.people[I.who];
+    const name = cap(f.title.toLowerCase().replace(/^the /, ''));
+    if (I.state === 'done') return `<span class="g">${ic('bulb')} ${name}</span> <span class="dim">— ${f.what}</span>`;
+    if (I.state === 'trying') return `${ic('flask')} ${name} <span class="k">— ${g.ideas.stage(k)}</span>`;
+    return `${ic('bulb')} ${name} <span class="dim">— ${who ? who.per.name + "'s idea" : 'an idea'}, not tried yet</span>`;
+  }
+
+  /** A name for something new: suggestions from the camp, or type your own. */
+  private nameIt(n: Naming) {
+    this.naming = true;
+    const el = this.namingEl;
+    el.innerHTML = `<h3></h3><div class="sg"></div><div class="row"></div>`;
+    (el.querySelector('h3') as HTMLElement).textContent = n.title;
+    const inp = document.createElement('input'); inp.value = n.sugg[0]; inp.maxLength = 28;
+    const ok = document.createElement('button'); ok.className = 'go'; ok.innerHTML = `${ic('check')} NAME IT`;
+    let fin = false;
+    const done = () => { if (fin) return; fin = true; this.naming = false; el.classList.remove('open'); n.done(inp.value.trim() || n.sugg[0]); };
+    for (const s of n.sugg) { const b = document.createElement('button'); b.textContent = s; b.onclick = () => { inp.value = s; inp.focus(); }; el.querySelector('.sg')!.appendChild(b); }
+    ok.onclick = done; inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') done(); };
+    el.querySelector('.row')!.append(inp, ok);
+    el.classList.add('open');
+    setTimeout(() => { if (!fin && document.activeElement !== inp) done(); }, 45000);
+  }
+
+  /** The whole camp on one page, all in words. */
+  private fillOverview() {
+    const g = this.game.group, C = g.camp, st = g.stock, V = g.village, n = g.people.filter(p => p.mode !== 'dead').length;
+    const esc = (t: string) => t.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
+    const word = (v: number, m = n) => cap(st.word(v, m).toLowerCase());
+    const names = (ps: Person[]) => ps.length ? ps.map(p => esc(p.per.name)).join(', ') : '<span class="dim">nobody</span>';
+    const alive = g.people.filter(p => p.mode !== 'dead' && p !== g.leader);
+    const out = alive.filter(p => p.mode === 'follow' || p.mode === 'wait'), scouts = alive.filter(p => p.mode === 'scout' || p.mode === 'lost' || p.mode === 'hurt');
+    const sick = alive.filter(p => p.mode === 'camp' && (p.hurt || p.health >= 2)), working = alive.filter(p => p.mode === 'camp' && p.job && g.jobs.on(p) && !sick.includes(p));
+    const resting = alive.filter(p => p.mode === 'camp' && !working.includes(p) && !sick.includes(p));
+    const built = C.list.filter(b => b.progress >= 1 && b.kind !== 'grave'), up = C.queue;
+    const huts = built.filter(b => b.kind === 'hut').length;
+    const coming: string[] = [];
+    if (V.storming) coming.push(`${ic('cloud-storm')} The storm is on us.`);
+    else if (V.warned && V.stormIn === 0) coming.push(`${ic('cloud-storm')} A storm hits today.`);
+    else if (V.warned && V.stormIn === 1) coming.push(`${ic('cloud-storm')} A storm hits tomorrow.`);
+    if (V.rumble > 0) coming.push(`${ic('flame')} The mountain is ${V.rumble > 6 ? 'smoking hard' : 'smoking'}.`);
+    if (g.cat.phase === 'stalk') coming.push(`${ic('paw')} ${esc(g.cat.name || 'The cat')} is out there${g.cat.wounded > 0 ? ', limping' : ''}.`);
+    for (const p of g.jobs.problems()) coming.push(`${ic('alert-circle')} ${esc(p.text)}`);
+    const dis = IDEAS.filter(k => g.ideas.s[k].state !== 'none');
+    const T = st.tools, tw = (v: number) => v <= 0 ? 'none' : v === 1 ? 'one' : v < 4 ? 'a few' : 'plenty';
+    const html = `${CLOSE}<h4>${V.name ? `THE VILLAGE OF ${esc(V.name.toUpperCase())} <span>— founded on day ${V.founded}</span>` : g.era === 'camp' ? 'THE CAMP' : 'THE CRASH SITE'}</h4><div class="cols"><div>
+      <h5>WHERE EVERYONE IS</h5>
+      <div class="ln"><b>Working</b> ${names(working)}</div><div class="ln"><b>With you</b> ${names(out)}</div><div class="ln"><b>Scouting</b> ${names(scouts)}</div>
+      <div class="ln"><b>Sick or hurt</b> ${names(sick)}</div><div class="ln"><b>Free</b> ${names(resting)}</div>
+      <h5>STOCKPILE</h5>
+      <div class="ln">${ic('fish')} Food: ${word(st.totalFood)} · ${ic('droplet')} Water: ${word(st.water)}${g.ideas.done('herbs') ? ` · ${ic('leaf')} Herbs: ${st.herbs <= 0 ? 'Out' : st.herbs < 4 ? 'Low' : 'Enough'}` : ''}</div>
+      ${g.era !== 'crash' ? `<div class="ln">${(['wood', 'bamboo', 'stone', 'vines', 'scrap'] as const).map(m => `${cap(m)}: ${word(st.mat[m], 12)}`).join(' · ')}</div>` : ''}
+      ${st.toolKnown.size ? `<div class="ln">${(['axe', 'spear', 'knife', 'basket', 'rope'] as const).filter(t => st.toolKnown.has(t) || T[t] > 0).map(t => `${cap(t)}: ${tw(T[t])}`).join(' · ')}</div>` : ''}
+      </div><div>
+      <h5>COMING UP</h5>${coming.length ? coming.map(t => `<div class="ln">${t}</div>`).join('') : '<div class="ln dim">Nothing worrying. For now.</div>'}
+      <h5>BUILDINGS</h5>
+      ${huts ? `<div class="ln">${huts === 1 ? 'One hut' : huts < 5 ? 'A few huts' : 'Plenty of huts'}${built.some(b => b.kind === 'hut' && b.shaky) ? ' <span class="b">(some shaky)</span>' : ''}</div>` : ''}
+      ${built.filter(b => b.kind !== 'hut').map(b => `<div class="ln">${cap(BUILD[b.kind].label)}${b.shaky ? ' <span class="b">— shaky</span>' : ''}</div>`).join('')}
+      ${up.map(b => `<div class="ln dim">Going up: ${BUILD[b.kind].label}${C.waitingFor(b) ? ` (waiting for ${C.waitingFor(b)})` : ''}</div>`).join('')}
+      ${dis.length ? `<h5>DISCOVERIES</h5>${dis.map(k => `<div class="ln">${this.ideaLine(k)}</div>`).join('')}` : ''}
+      </div></div>`;
+    if (html === this.ovKey) return;
+    this.ovKey = html; this.overview.innerHTML = html;
+  }
+
   /** What someone does all day, how good they are at it, what they like. */
   private workLine(p: Person) {
     if (p.mode === 'dead') return '';
@@ -467,7 +580,7 @@ export class Social {
   private fillJobs() {
     const g = this.game.group, J = g.jobs, C = g.camp, st = g.stock, vis = J.visible();
     const word = (n: number) => n <= 0 ? 'Out' : n < 6 ? 'Low' : n < 16 ? 'Enough' : 'Plenty';
-    const key = 'j' + g.party.map(p => p.id).join('.') + vis.map(k => k + J.prio[k] + J.status(k) + g.people.filter(p => p.job === k).map(p => p.id).join('.')).join() + C.queue.map(b => b.id + ':' + Math.floor(b.progress * 3) + (C.waitingFor(b) ?? '')).join() + Object.values(st.mat).map(word).join() + J.fresh;
+    const key = 'j' + IDEAS.map(k => g.ideas.s[k].state + g.ideas.stage(k)).join() + g.party.map(p => p.id).join('.') + vis.map(k => k + J.prio[k] + J.status(k) + g.people.filter(p => p.job === k).map(p => p.id).join('.')).join() + C.queue.map(b => b.id + ':' + Math.floor(b.progress * 3) + (C.waitingFor(b) ?? '')).join() + Object.values(st.mat).map(word).join() + J.fresh;
     if (key === this.rosterKey) return;
     this.rosterKey = key;
     const shiftG = { day: '☀', evening: '☀☾', night: '☾' };
@@ -486,6 +599,8 @@ export class Social {
     }
     const T = st.tools, tw = (n: number) => n <= 0 ? '—' : n === 1 ? 'one' : n < 4 ? 'a few' : 'plenty';
     if (st.toolKnown.size) html += `<h5>TOOLS</h5><div>${(['axe', 'spear', 'knife', 'basket', 'rope'] as const).filter(t => st.toolKnown.has(t) || T[t] > 0).map(t => `${cap(t)}: ${tw(T[t])}`).join(' · ')}${C.has('workbench') ? '' : ' <span class="dim">(needs a workbench to make more)</span>'}</div>`;
+    const dis = IDEAS.filter(k => g.ideas.s[k].state !== 'none');
+    if (dis.length) html += `<h5>DISCOVERIES</h5>` + dis.map(k => `<div>${this.ideaLine(k)}</div>`).join('');
     if (g.era !== 'crash') html += `<h5>MATERIALS</h5><div>Wood: ${word(st.mat.wood)} · Bamboo: ${word(st.mat.bamboo)} · Stone: ${word(st.mat.stone)} · Vines: ${word(st.mat.vines)} · Scrap: ${word(st.mat.scrap)}</div>`;
     const free = g.people.filter(p => p !== g.leader && p.mode === 'camp' && !p.job && !p.hurt);
     html += `<h5>FREE RIGHT NOW</h5><div class="dim">${free.length ? free.map(p => p.per.name).join(', ') : 'Nobody — everyone is busy.'}</div>`;

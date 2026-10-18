@@ -142,8 +142,52 @@ function edgePost() {
   return c.out();
 }
 
+/** A beehive kiln of stacked stones with a glowing mouth. */
+function kiln() {
+  const c = canvas(18, 16);
+  c.roof(9, 0, 1, 16, 14, (x, y) => (x * 3 + y * 5) % 7 === 0 ? 'G' : (x + y) % 3 === 0 ? 'g' : 'q');
+  c.rect(7, 9, 4, 5, 'e'); c.rect(8, 11, 2, 3, 'o'); c.set(8, 12, 'y');
+  c.rect(8, 0, 2, 2, 'G'); c.rect(0, 15, 18, 1, 'G');
+  return c.out();
+}
+
+/** Garden rows: tilled earth with young plants. */
+function garden() {
+  const c = canvas(28, 14);
+  for (let y = 0; y < 14; y++) for (let x = 0; x < 28; x++) c.set(x, y, y % 4 === 0 ? 'M' : 'N');
+  for (let r = 0; r < 3; r++) for (let x = 2; x < 27; x += 4) { const y = 2 + r * 4; c.set(x, y, 'V'); c.set(x - 1, y - 1, 'v'); c.set(x + 1, y - 1, 'v'); c.set(x, y - 2, 'V'); }
+  return c.out();
+}
+
+/** A spike pit: a dark hole bristling with sharpened stakes. */
+function pit() {
+  const c = canvas(12, 7);
+  for (let y = 2; y < 7; y++) for (let x = 0; x < 12; x++) { const d = ((x - 5.5) / 6) ** 2 + ((y - 4.5) / 2.6) ** 2; if (d < 1) c.set(x, y, d < 0.55 ? 'e' : 'N'); }
+  for (const x of [2, 4, 6, 8, 10]) { c.set(x, 2, 'n'); c.set(x, 3, 'n'); c.set(x, 1, 'a'); }
+  return c.out();
+}
+
+/** A goat pen: a square of lashed rails. */
+function pen() {
+  const c = canvas(34, 16);
+  for (let x = 0; x < 34; x++) { c.set(x, 2, 'n'); c.set(x, 13, 'n'); c.set(x, 7, x % 3 ? 'n' : '.'); }
+  for (const x of [0, 8, 16, 25, 33]) c.rect(x, 0, 1, 16, 'N');
+  c.rect(1, 14, 32, 2, 'h');
+  return c.out();
+}
+
+/** A bamboo chicken coop on legs with a ramp. */
+function coop() {
+  const c = canvas(18, 16);
+  c.roof(9, 0, 0, 17, 5, thatch);
+  c.rect(2, 5, 14, 6, 'h'); for (let x = 2; x < 16; x += 3) c.rect(x, 5, 1, 6, 'a');
+  c.rect(7, 7, 3, 4, 'e'); for (const x of [3, 14]) c.rect(x, 11, 1, 5, 'N');
+  for (let i = 0; i < 4; i++) c.set(10 + i, 11 + i, 'n');
+  return c.out();
+}
+
 export const BUILD_ART: Record<string, { frames: string[][] }> = {
   hut: { frames: [hut()] }, storage: { frames: [storage()] }, sickbay: { frames: [sickbay()] }, workbench: { frames: [workbench()] },
   cooking: { frames: [cooking()] }, watchFire: { frames: [watchFire()] }, beacon: { frames: [beacon()] }, fishTrap: { frames: [fishTrap()] },
-  fencePost: { frames: [fencePost()] }, edgePost: { frames: [edgePost()] }, bath: { frames: [bath()] }, stakes: { frames: [stakes()] },
+  fencePost: { frames: [fencePost()] }, edgePost: { frames: [edgePost()] }, kiln: { frames: [kiln()] }, garden: { frames: [garden()] }, pit: { frames: [pit()] }, pen: { frames: [pen()] }, coop: { frames: [coop()] }, bath: { frames: [bath()] }, stakes: { frames: [stakes()] },
 };

@@ -39,10 +39,15 @@ export class Requests {
   private fishDay = -1;
   private lookSpot: Pt | null = null;
   private spots: Partial<Record<BKind, Pt>> = {};
+  /** things someone has to ask you about soon (discoveries, the village, a tradition): they go before random ideas */
+  pending: { p: Person; kind: string; text: string; answers: Answer[]; ignore: () => void }[] = [];
 
   constructor(private g: Group) {}
 
   // ------------------------------------------------------------------ public
+
+  /** Someone needs to ask you something: it waits its turn, then they come over. */
+  urgent(p: Person, kind: string, text: string, answers: Answer[], ignore: () => void) { this.pending.push({ p, kind, text, answers, ignore }); }
 
   answer(i: number) {
     const r = this.cur; if (!r) return;
@@ -109,6 +114,10 @@ export class Requests {
       const gone = p.mode === 'scout' || p.mode === 'lost' || p.mode === 'hurt' || p.hurt || (p.mode === 'camp' && p.act !== 'ask');
       if (gone || h >= 20.5) { this.close(); return; }
       if (r.t > (r.arrived ? 75 : 110) || far > 100) { this.close(); g.story.say(p, 'Never mind.'); r.ignore(); return; }
+    } else if (this.pending.length && h > 7 && h < 19.5 && !g.goals.opts.length) {
+      this.pending = this.pending.filter(x => x.p.mode !== 'dead');
+      const q = this.pending.find(x => this.free(x.p, L));
+      if (q) { this.pending = this.pending.filter(x => x !== q); this.open(this.req(q.p, q.kind, q.text, true, q.answers, q.ignore)); }
     } else if ((this.nextT -= dt) <= 0 && h > 7 && h < 18.5 && !g.goals.opts.length) {
       this.nextT = 160 + Math.random() * 140;
       this.spawn(L);
@@ -153,18 +162,14 @@ export class Requests {
 
   private spawn(L: Person) {
     const g = this.g;
-    const cands = g.people.filter(p => p !== L && !p.hurt && p.health < 2 && p.act !== 'funeral' && p.pose !== 'sleep' && !this.busy(p) &&
-      (p.mode === 'follow' || p.mode === 'wait' || (p.mode === 'camp' && Math.hypot(p.x - L.x, p.z - L.z) < 70 && p.act !== 'huddle')));
+    const cands = g.people.filter(p => this.free(p, L));
     if (!cands.length) return;
-    const makers = [...(this.g.era === 'camp' ? [this.suggestBuild, this.suggestBuild] : []), this.huntCat, this.pair, this.hoard, this.dispute, this.ration, this.whyThem, this.fish, this.signal, this.wreck, this.rainCatcher, this.lookout, this.sos, this.rescue]
+    const makers = [...(this.g.era !== 'crash' ? [this.suggestBuild, this.suggestBuild] : []), this.huntCat, this.pair, this.hoard, this.dispute, this.ration, this.whyThem, this.fish, this.signal, this.wreck, this.rainCatcher, this.lookout, this.sos, this.rescue]
       .sort(() => Math.random() - 0.5);
     for (const p of [...cands].sort(() => Math.random() - 0.5)) for (const mk of makers) {
       const r = mk.call(this, p);
       if (!r) continue;
-      this.cur = r; p.ask = true;
-      if (p.mode === 'camp') { p.act = 'ask'; p.path = []; p.carry = 0; p.partner = null; }
-      else { r.arrived = true; g.onAsk(); }
-      g.hint('ask', 'Someone with a ! wants to talk. Click them to answer, or ignore them and they will decide alone.');
+      this.open(r);
       // someone who knows better pulls a face at a bad idea
       if (!r.good && r.kind === 'idea' && Math.random() < 0.45) {
         const sk = g.people.find(o => o !== p && o !== L && o.mode === 'camp' && Math.hypot(o.x - p.x, o.z - p.z) < 25 && (g.story.rel(o, p) < 10 || has(o.per, 'honest')));
@@ -172,6 +177,19 @@ export class Requests {
       }
       return;
     }
+  }
+
+  /** Free to come and talk: awake, well, not busy with something else. */
+  private free(p: Person, L: Person) {
+    return p !== L && !p.hurt && p.health < 2 && p.act !== 'funeral' && p.act !== 'gather' && p.act !== 'haul' && p.pose !== 'sleep' && !this.busy(p) && !p.kid &&
+      (p.mode === 'follow' || p.mode === 'wait' || (p.mode === 'camp' && Math.hypot(p.x - L.x, p.z - L.z) < 70 && p.act !== 'huddle'));
+  }
+  private open(r: Req) {
+    const g = this.g, p = r.p;
+    this.cur = r; p.ask = true;
+    if (p.mode === 'camp') { p.act = 'ask'; p.path = []; p.carry = 0; p.partner = null; p.up = 0; }
+    else { r.arrived = true; g.onAsk(); }
+    g.hint('ask', 'Someone with a ! wants to talk. Click them to answer, or ignore them and they will decide alone.');
   }
 
   private req(p: Person, kind: string, text: string, good: boolean, answers: Answer[], ignore: () => void, shy = false): Req {
@@ -285,7 +303,7 @@ export class Requests {
 
   private lookout(p: Person) {
     const g = this.g, S = g.story;
-    if (g.camp.has('lookout')) return null;
+    if (g.camp.has('lookout') || g.camp.has('tower')) return null;
     const s = this.spot('lookout');
     const target = g.disc.pois.filter(q => q.major && !q.known && !g.disc.markers.some(m => m.poi === q)).sort((a, b) => Math.hypot(a.x - s.x, a.z - s.z) - Math.hypot(b.x - s.x, b.z - s.z))[0];
     if (!target) return null;

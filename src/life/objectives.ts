@@ -16,7 +16,7 @@ export function objectives(g: Group): Objective[] {
   for (const p of g.people) if (p.mode !== 'dead' && p.health >= 2) out.push({ key: 'sick' + p.id, text: p.health >= 3 ? `${p.per.name} is very sick: sick bay, food and water now` : `${p.per.name} is sick: keep them fed and resting`, x: p.x, z: p.z });
   if (g.cat.hunting) out.push({ key: 'hunt', text: `Hunt ${g.cat.name || 'the cat'}: take a party to its lair (red ring)`, x: g.cat.lair.x, z: g.cat.lair.z });
   const r = g.requests.cur;
-  if (r) out.push({ key: 'ask', text: `${r.p.per.name} wants to talk (❗)`, x: r.p.x, z: r.p.z });
+  if (r) out.push({ key: 'ask', text: `${r.p.per.name} wants to talk`, x: r.p.x, z: r.p.z });
   if (g.goals.opts.length) out.push({ key: 'plan', text: 'Pick a plan for today' });
   // the camp's own problems: things to fix
   for (const pr of g.jobs.problems().slice(0, 2)) out.push(pr);

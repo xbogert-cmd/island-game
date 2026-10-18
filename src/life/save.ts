@@ -42,6 +42,9 @@ export function save(game: Game) {
     explored: b64(g.disc.explored),
     stock: { food: g.stock.food, water: g.stock.water, stolen: g.stock.stolen, ration: g.stock.ration, mat: g.stock.mat, today: g.stock.today, tools: g.stock.tools, toolKnown: [...g.stock.toolKnown], hides: g.stock.hides, cured: g.stock.cured },
     dead: g.health.dead, legend: g.chatter.legend, crewMode: g.crew.mode,
+    ideas: { s: g.ideas.s, seen: g.ideas.seen, tended: g.ideas.tended, gardenDays: g.ideas.gardenDays, harvests: g.ideas.harvests },
+    village: (({ name, founded, settled, state, stormIn, warned, prepared, storming, rumble }) => ({ name, founded, settled, state: state === 'tonight' ? 'tonight' : state === 'asked' ? 'none' : state, stormIn, warned, prepared, storming, rumble }))(g.village),
+    looted: g.disc.pois.filter(q => q.loot === '').map(q => q.id), herbs: g.stock.herbs, wounded: g.cat.wounded,
     cat: { phase: g.cat.phase, name: g.cat.name, signs: g.cat.signs, bold: g.cat.bold, hunting: g.cat.hunting, nights: (g.cat as Any).campNights },
     wear: b64(Uint8Array.from(g.bodies.wear, v => Math.min(255, v))),
     camp: { list: g.camp.list, queue: g.camp.queue.map(b => b.id), nid: (g.camp as Any).nid },
@@ -98,6 +101,12 @@ export function load(game: Game): boolean {
   for (const m of s.markers) g.disc.addMarker({ x: m.x, z: m.z, r: m.r, kind: m.kind, text: m.text, fake: m.fake, poi: m.poi >= 0 ? g.disc.pois[m.poi] : null, who: m.who >= 0 ? P[m.who] : null });
   g.leader = P[s.leader]; g.leader.mode = 'leader'; g.leader.actT = 0;
   if (s.crewMode) g.crew.mode = s.crewMode;
+  if (s.ideas) Object.assign(g.ideas, s.ideas);
+  if (s.village) { Object.assign(g.village, s.village); if (g.village.storming) g.weather.forced = 'storm'; }
+  for (const id of s.looted ?? []) if (g.disc.pois[id]) g.disc.pois[id].loot = '';
+  g.stock.herbs = s.herbs ?? 0; g.cat.wounded = s.wounded ?? 0;
+  // nobody wakes up at sea
+  for (const p of P) if (p.mode !== 'dead' && !g.grid.walkable(p.x, p.z)) { const q = g.grid.nearest(p.x, p.z); if (q) { p.x = q.x; p.z = q.z; } }
   g.crew.out = g.crew.outside(g.leader.x, g.leader.z);
   game.rig.jumpTo(g.leader.x, g.leader.z);
   g.story.log(`(Picked up again on day ${game.clock.day}.)`);

@@ -69,6 +69,8 @@ export class CameraRig {
   }
 
   jumpTo(x: number, z: number) { this.target.set(x, 0, z); this.y = heightAt(this.world, x, z); }
+  /** Earthquake: the view jolts for a moment. */
+  shake = 0;
 
   update(dt: number) {
     const sp = 40 * dt * (4 / this.zoom);
@@ -105,6 +107,7 @@ export class CameraRig {
     const pr = cam.position.x * rx + cam.position.y * ry + cam.position.z * rz, pu = cam.position.x * ux + cam.position.y * uy + cam.position.z * uz;
     const dr = Math.round(pr / PX) * PX - pr, du = Math.round(pu / PX) * PX - pu;
     cam.position.x += rx * dr + ux * du; cam.position.y += ry * dr + uy * du; cam.position.z += rz * dr + uz * du;
+    if (this.shake > 0) { const k = Math.round((Math.random() - 0.5) * this.shake * 6) * PX, j = Math.round((Math.random() - 0.5) * this.shake * 3) * PX; cam.position.x += rx * k + ux * j; cam.position.y += ry * k + uy * j; cam.position.z += rz * k + uz * j; this.shake = Math.max(0, this.shake - dt * 0.6); }
     cam.updateMatrixWorld();
     const sy = Math.round(this.yaw / (Math.PI / 2)) * (Math.PI / 2), cs = Math.cos(sy), sn = Math.sin(sy);
     if (Math.abs(sy - this.yaw) < 1e-9) { U.uCamRight.value.set(rx, ry, rz); U.uCamUp.value.set(ux, uy, uz); }
