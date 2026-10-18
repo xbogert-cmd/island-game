@@ -128,7 +128,9 @@ function campCamp(k: Kit) {
   // lean-to shelters made from tarps and plane panels
   for (const [x, z, ry, m] of [[-5, -4, 0.6, MAT.tarpO], [4.5, -5, -0.5, MAT.tarpB]] as [number, number, number, Mat][]) {
     const s = new THREE.Group(); s.position.set(x, 0, z); s.rotation.y = ry; k.g.add(s); const q = new Kit(s);
-    q.cyl(0.07, 0.07, 2.2, MAT.wood, -1.3, 1.1, 0); q.cyl(0.07, 0.07, 2.2, MAT.wood, 1.3, 1.1, 0);
+    // poles hold up the tarp's high edge, with a crossbar under it, so nothing pokes through
+    q.cyl(0.07, 0.07, 1.86, MAT.wood, -1.35, 0.93, -1.62); q.cyl(0.07, 0.07, 1.86, MAT.wood, 1.35, 0.93, -1.62);
+    q.cyl(0.06, 0.06, 2.8, MAT.wood, 0, 1.8, -1.6, 0, 0, Math.PI / 2);
     q.add(new THREE.PlaneGeometry(2.9, 2.6), m, 0, 1.1, -0.6, -0.95);
     q.box(1.6, 0.15, 0.8, MAT.bags[1], 0, 0.1, -0.7);
   }

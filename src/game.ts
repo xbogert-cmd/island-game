@@ -7,6 +7,7 @@ import { Terrain, uploadWorldTextures } from './render/terrain';
 import { Water } from './render/water';
 import { Vegetation } from './render/vegetation';
 import { buildProps, PropsOut } from './render/props';
+import { Camp3D, SOLID } from './render/camp3d';
 import { WeatherFx } from './render/weatherfx';
 import { SpriteBatch, buildAtlas } from './render/sprites';
 import { PITCH, PX, U } from './render/shared';
@@ -30,6 +31,7 @@ export class Game {
   weather = new Weather();
   veg: Vegetation;
   props: PropsOut;
+  camp3d: Camp3D;
   fx: WeatherFx;
   group: Group;
   /** person the camera follows instead of the leader (set from the UI) */
@@ -60,7 +62,8 @@ export class Game {
     this.particles = new Particles(this.batch);
     this.wildlife = new Wildlife(world, this.batch, this.particles);
     this.group = new Group(world, this.clock, this.weather, this.particles);
-    this.scene.add(new Terrain(world).group, new Water(world).group, this.veg.group, this.props.group, this.fx.group, this.batch.mesh, this.group.bodies.batch.mesh, this.group.bodies.batch.silhouette(), ...this.group.bodies.lights);
+    this.camp3d = new Camp3D(world, this.group.fire);
+    this.scene.add(new Terrain(world).group, new Water(world).group, this.veg.group, this.props.group, this.camp3d.group, this.fx.group, this.batch.mesh, this.group.bodies.batch.mesh, this.group.bodies.batch.silhouette(), ...this.group.bodies.lights);
     for (const r of world.rivers) for (const k of r.falls) { const p = r.pts[Math.min(r.pts.length - 1, k + 1)]; this.falls.push({ x: p.x, y: p.y, z: p.z }); }
     this.sky = new Sky(this.scene);
     this.tally = this.makeTally();
@@ -195,6 +198,7 @@ export class Game {
       b.push(m.x, y, m.z, ATLAS[red ? 'xMark' : 'qMark'][0], false, 1, 1, 1, 2);
     }
     this.drawPaths(t);
+    this.camp3d.sync(g.camp.list);
     this.drawCamp(near);
     this.drawCat(near);
     for (const tr of g.scouting.trips) for (let i = 0; i < tr.trail.length; i += 1) {
@@ -254,6 +258,7 @@ export class Game {
         posts.forEach((q, i) => { if (i < n) b.push(q.x, heightAt(w, q.x, q.z) - 0.05, q.z, ATLAS.fencePost[0]); else if (i < n + 3 && bd.progress > 0) b.push(q.x, heightAt(w, q.x, q.z) - 0.05, q.z, ATLAS.stakes[0]); });
         continue;
       }
+      if (SOLID.has(bd.kind)) continue;
       const flat = BUILD[bd.kind].flat, fr = ATLAS[bd.kind], R0 = fr[Math.floor(tt * 2) % fr.length];
       if (bd.progress >= 1) b.push(bd.x, gy + (flat ? 0.04 : -0.05), bd.z, R0, false, 1, 1, 1, 1, flat);
       else {
@@ -290,7 +295,7 @@ export class Game {
     for (const h of g.camp.list) {
       if (h.kind !== 'hut' || h.progress < 1 || !h.owners.length || !near(h.x, h.z)) continue;
       const o = g.people[h.owners[0]], c = o.per.look.shirt, gy = heightAt(w, h.x, h.z);
-      b.push(h.x + rr.x * 1.5 * PX, gy + 27 * yUp, h.z + rr.z * 1.5 * PX, ATLAS.flag[Math.floor(tt * 2 + h.id) % 2], false, parseInt(c.slice(1, 3), 16) / 255, parseInt(c.slice(3, 5), 16) / 255, parseInt(c.slice(5, 7), 16) / 255, 1);
+      b.push(h.x, gy + 2.75, h.z, ATLAS.flag[Math.floor(tt * 2 + h.id) % 2], false, parseInt(c.slice(1, 3), 16) / 255, parseInt(c.slice(3, 5), 16) / 255, parseInt(c.slice(5, 7), 16) / 255, 1);
     }
     if (C.phase === 'dead' && g.leader) {
       const h = g.camp.hutOf(g.leader.id), at = h ? { x: h.x + rr.x * 2.6, z: h.z + rr.z * 2.6 } : { x: g.fire.x + 4, z: g.fire.z - 4 };
