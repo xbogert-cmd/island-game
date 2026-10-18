@@ -20,7 +20,7 @@ function flatWorld(): World {
     for (let x = 300; x < 304; x++) if (z < 400 || z > 410) h[z * N + x] = 30;
     for (let x = 100; x < 140; x++) if (z > 200 && z < 600) { h[z * N + x] = -2; biome[z * N + x] = B.Ocean; }
   }
-  return { seed: 1, h, biome, moist: new Float32Array(N * N), clear: new Uint8Array(N * N), riverDist: new Float32Array(N * N).fill(99), rivers: [], landmarks: [],
+  return { seed: 1, h, biome, moist: new Float32Array(N * N), clear: new Uint8Array(N * N), riverDist: new Float32Array(N * N).fill(99), riverY: new Float32Array(N * N).fill(-99), rivers: [], landmarks: [],
     volcano: { x: 0, z: 0, r: 1 }, lake: { x: 0, z: 0, level: 0 }, crash: { x: 0, z: 0, rot: 0 }, islandCenter: { x: 384, z: 384 } };
 }
 

@@ -23,6 +23,8 @@ export interface World {
   moist: Float32Array;
   clear: Uint8Array;     // 1 = no trees (landmarks, crash scar, camp)
   riverDist: Float32Array;
+  /** river surface height over its bed (-99 where there's no river) */
+  riverY: Float32Array;
   rivers: River[];
   landmarks: Landmark[];
   volcano: { x: number; z: number; r: number };
@@ -39,6 +41,11 @@ export function heightAt(w: World, x: number, z: number): number {
   const xi = x | 0, zi = z | 0, fx = x - xi, fz = z - zi, i = zi * N + xi;
   const a = w.h[i], b = w.h[i + 1], c = w.h[i + N], d = w.h[i + N + 1];
   return a + (b - a) * fx + (c - a) * fz + (a - b - c + d) * fx * fz;
+}
+/** Where feet go: the ground, or wading just under the river's surface. */
+export function standAt(w: World, x: number, z: number) {
+  const g = heightAt(w, x, z), r = inb(x, z) ? w.riverY[idx(x, z)] : -99;
+  return r - g > 2 ? g : Math.max(g, r - 0.25);   // >2 up: a waterfall's top edge, not water you're standing in
 }
 export const biomeAt = (w: World, x: number, z: number) => (inb(x, z) ? w.biome[idx(x, z)] : B.Ocean);
 
@@ -198,10 +205,12 @@ export function generate(seed: number): World {
   for (const [sx, sz] of sources) traceRiver(sx, sz, C, C);
 
   // ---- 5. moisture + biomes
-  const riverDist = new Float32Array(N * N).fill(99);
+  const riverDist = new Float32Array(N * N).fill(99), riverY = new Float32Array(N * N).fill(-99);
   for (const rv of rivers) for (const p of rv.pts) {
     for (let z = p.z - 14 | 0; z <= p.z + 14; z++) for (let x = p.x - 14 | 0; x <= p.x + 14; x++) {
-      if (!inb(x, z)) continue; const i = idx(x, z); riverDist[i] = Math.min(riverDist[i], Math.hypot(x - p.x, z - p.z));
+      if (!inb(x, z)) continue; const i = idx(x, z), d = Math.hypot(x - p.x, z - p.z);
+      if (d >= riverDist[i]) continue;
+      riverDist[i] = d; riverY[i] = d < p.w + 1.5 ? p.y + 0.06 : -99;   // nearest point wins, so waterfalls don't lift the pool below
     }
   }
   const swampAt = (() => {
@@ -314,5 +323,5 @@ export function generate(seed: number): World {
     for (let z = l.z - l.r - 3 | 0; z <= l.z + l.r + 3; z++) for (let x = l.x - l.r - 3 | 0; x <= l.x + l.r + 3; x++) if (inb(x, z) && Math.hypot(x - l.x, z - l.z) < l.r + 3) clear[idx(x, z)] = 1;
   }
 
-  return { seed, h, biome, moist, clear, riverDist, rivers, landmarks, volcano: vol, lake, crash, islandCenter: { x: C, z: C } };
+  return { seed, h, biome, moist, clear, riverDist, riverY, rivers, landmarks, volcano: vol, lake, crash, islandCenter: { x: C, z: C } };
 }

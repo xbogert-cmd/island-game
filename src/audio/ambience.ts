@@ -35,9 +35,13 @@ export class Ambience {
       if (f2) { const f3 = ctx.createBiquadFilter(); f3.type = f2[0]; f3.frequency.value = f2[1]; fl.connect(f3); tail = f3; }
       const g = ctx.createGain(); g.gain.value = 0; src.connect(fl); tail.connect(g); g.connect(this.master); src.start();
       this.beds[name] = g;
+      return fl;
     };
     bed('waves', 'lowpass', 520); bed('wind', 'bandpass', 520, 0.6); bed('rain', 'highpass', 1600, 0.5, ['lowpass', 7000]);
-    bed('river', 'bandpass', 1500, 0.4); bed('rumble', 'lowpass', 70); bed('cicada', 'bandpass', 5200, 8);
+    // river: a lower, burbling rush (filter wobbles) instead of flat hiss
+    const rf = bed('river', 'bandpass', 800, 1.1), wob = ctx.createOscillator(), wg = ctx.createGain();
+    wob.frequency.value = 0.7; wg.gain.value = 260; wob.connect(wg); wg.connect(rf.frequency); wob.start();
+    bed('rumble', 'lowpass', 70); bed('cicada', 'bandpass', 5200, 8);
     // cicada tremolo
     const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 23; lg.gain.value = 0.5; lfo.connect(lg);
     const trem = ctx.createGain(); this.beds.cicada.disconnect(); this.beds.cicada.connect(trem); trem.connect(this.master); lg.connect(trem.gain); lfo.start();
@@ -51,7 +55,7 @@ export class Ambience {
     const set = (k: string, v: number) => this.beds[k].gain.setTargetAtTime(Math.max(0, v), now, 0.6);
     set('wind', (0.04 + Z.high * 0.12 + wind * 0.32) * (0.7 + Z.coast * 0.3));
     set('rain', rain * 0.45);
-    set('river', Z.river * 0.32 * near);
+    set('river', Z.river * 0.3 * near);
     set('rumble', Z.volcano * 0.5 + rain * wind * 0.25);
     set('cicada', Z.jungle * day * 0.05 * (1 - rain) * near);
     set('waves', Z.coast * 0.06);
@@ -96,10 +100,10 @@ export class Ambience {
       if (b === B.Grass || b === B.Flowers) Z.grass++;
       if (b === B.Swamp) Z.swamp++;
       if (b === B.Highland || b === B.Volcanic) Z.high++;
-      river = Math.min(river, w.riverDist[k]);
+      if (i === 0) river = w.riverDist[k];
     }
     for (const k of ['coast', 'jungle', 'grass', 'swamp', 'high'] as const) Z[k] /= n;
-    Z.river = Math.max(0, 1 - river / 25);
+    Z.river = Math.max(0, 1 - river / 14) ** 2;   // only right beside the water
     for (const l of w.landmarks) if (l.kind === 'hotSpring' || l.kind === 'steamVent') Z.spring = Math.max(Z.spring, Math.max(0, 1 - Math.hypot(l.x - x, l.z - z) / 25));
     Z.volcano = Math.max(0, 1 - Math.hypot(w.volcano.x - x, w.volcano.z - z) / (w.volcano.r * 0.45)) * (heightAt(w, x, z) > 15 ? 1 : 0.5);
     this.zone = Z;
