@@ -25,9 +25,11 @@ export class Cat {
   private signAt = -1;
   private fleeT = 0;
   private thinkT = 0;
-  private fight: { t: number; party: Person[] } | null = null;
+  private fight: { t: number; party: Person[]; ring?: boolean } | null = null;
   private campNights = 0;
   private tgt: Pt = { x: 0, z: 0 }; private spd = 0;
+  /** seconds it has been following you through the dark */
+  stalkT = 0;
 
   constructor(private g: Group) {
     // a cave if there is one far enough away, else deep jungle
@@ -42,7 +44,7 @@ export class Cat {
     if (this.phase === 'dead') { this.visible = false; return; }
     if (this.phase === 'none') { if (g.era !== 'crash') this.phase = 'signs'; return; }
     // a new night
-    if (dark && this.night !== g.clock.day) { this.night = g.clock.day; this.campNights++; this.signAt = 21 + Math.random() * 5; if (this.signAt >= 24) this.signAt -= 24; this.visible = false; }
+    if (dark && this.night !== g.clock.day) { this.night = g.clock.day; this.campNights++; this.stalkT = 0; this.signAt = 21 + Math.random() * 5; if (this.signAt >= 24) this.signAt -= 24; this.visible = false; }
     if (this.phase === 'signs') {
       if (dark && this.signAt >= 0 && Math.abs(h - this.signAt) < 0.1) { this.signAt = -1; this.sign(); }
       if (this.campNights > 3 && this.signs >= 2) this.phase = 'stalk';
@@ -119,11 +121,32 @@ export class Cat {
       if (scary[0]) S.say(scary[0], pickOf(['GET OUT OF HERE!', 'Hyah! Go!', 'Back! BACK!']), 2);
       this.flee(); return;
     }
+    // you, out in the dark: it follows, eyes at the edge of the torchlight, and maybe it pounces
+    const L = g.leader;
+    if (L && !g.canoe.riding(L) && Math.hypot(L.x - F.x, L.z - F.z) > 30 && this.wounded <= 0 && !g.hands.busy()) {
+      const d = Math.hypot(L.x - this.x, L.z - this.z), crowd = g.party.filter(p => Math.hypot(p.x - L.x, p.z - L.z) < 8).length;
+      if (d < 40) {
+        if (this.stalkT === 0) {
+          const dog = g.animals.dog;
+          if (dog.phase === 'tame' && Math.hypot(dog.x - L.x, dog.z - L.z) < 15) S.toast(`${dog.name || 'The dog'} growls at the dark behind you.`, 'bad');
+          else S.toast('Eyes in the dark. Something is following you.', 'bad');
+          g.hint('stalked', 'The cat is following you. Get back to the fire, or turn and be ready.');
+        }
+        this.stalkT += 1; this.eyes = true;
+        if (this.stalkT > (L.torch ? 50 : 25) + crowd * 30 && d < 20 && Math.random() < 0.3) { this.stalkT = 0; this.x = L.x + (this.x - L.x) / d * 2; this.z = L.z + (this.z - L.z) / d * 2; g.hands.fight('cat', L, null); this.flee(); return; }
+        const keep = L.torch ? 14 : 9, a = Math.atan2(this.z - L.z, this.x - L.x);
+        this.tgt = { x: L.x + Math.cos(a) * keep, z: L.z + Math.sin(a) * keep }; this.spd = 4; return;
+      }
+    } else this.stalkT = 0;
     // someone alone in the dark, away from the fire?
     const lone = alive.filter(p => !p.torch && Math.hypot(p.x - F.x, p.z - F.z) > 16 && !alive.some(o => o !== p && Math.hypot(o.x - p.x, o.z - p.z) < 7));
     const prey = lone.sort((a, b) => Math.hypot(a.x - this.x, a.z - this.z) - Math.hypot(b.x - this.x, b.z - this.z))[0];
     if (prey && near(prey, 45)) {
-      if (near(prey, 2.5) && Math.random() < 0.35 + this.bold * 0.1) { this.attack(prey); return; }
+      if (near(prey, 2.5) && Math.random() < 0.35 + this.bold * 0.1) {
+        // you're right there: you can step in
+        if (g.leader && Math.hypot(g.leader.x - prey.x, g.leader.z - prey.z) < 12 && !g.hands.busy()) { prey.poseO = 'startle'; prey.poseT = 1; g.hands.fight('cat', prey, null); this.flee(); return; }
+        this.attack(prey); return;
+      }
       this.tgt = { x: prey.x, z: prey.z }; this.spd = 3.4; return;
     }
     // no fence: the food pile
@@ -183,14 +206,23 @@ export class Cat {
     this.g.story.say(party[0], 'THERE! Spears up!', 3);
   }
   private showdown(dt: number) {
-    const g = this.g, S = g.story, f = this.fight!, L = g.leader!;
+    const g = this.g, f = this.fight!, L = g.leader!;
     f.t += dt;
     this.face = L.x > this.x ? 1 : -1; this.moving = f.t % 1 < 0.5;
-    if (f.t < 3) return;
+    if (f.t < 3 || f.ring) return;
+    // you lead the fight: how you do decides it
+    f.ring = true;
+    g.hands.rings.push({ title: `${(this.name || 'the cat').toUpperCase()} TURNS ON YOU`, beats: ['DODGE', 'STRIKE', 'DODGE', 'STRIKE'], hard: 0.65, skill: 'fight', at: { x: this.x, z: this.z }, done: (hits) => {
+      g.hands.xp.fight += 2 + hits;
+      this.endHunt(f, hits);
+    } });
+  }
+  private endHunt(f: NonNullable<Cat['fight']>, hits: number) {
+    const g = this.g, S = g.story, L = g.leader!;
     this.fight = null; this.hunting = false;
     for (const m of g.disc.markers.filter(m => m.text.endsWith('lair'))) g.disc.removeMarker(m);
     const spears = Math.min(g.stock.tools.spear, f.party.length + 1);
-    const odds = 0.3 + spears * 0.1 + f.party.filter(p => has(p.per, 'brave')).length * 0.06 + f.party.length * 0.04 - this.bold * 0.1 + (this.wounded > 0 ? 0.2 : 0);
+    const odds = 0.1 + hits * 0.15 + spears * 0.06 + f.party.filter(p => has(p.per, 'brave')).length * 0.05 + f.party.length * 0.03 - this.bold * 0.08 + (this.wounded > 0 ? 0.2 : 0);
     if (Math.random() < odds) {
       this.phase = 'dead'; this.visible = false;
       const hero = f.party.slice().sort((a, b) => (has(b.per, 'brave') ? 1 : 0) - (has(a.per, 'brave') ? 1 : 0))[0];
@@ -200,9 +232,11 @@ export class Cat {
       S.trustAll(8, L); S.trust(hero, 10); for (const p of g.people) if (p !== hero && p.mode !== 'dead') S.addRel(p, hero, 8);
       for (const p of f.party) { p.poseO = 'cheer'; p.poseT = 3; S.mood(p, 'happy', 200); }
       g.chatter.legend = `${hero.per.name} killed ${this.name || 'the cat'}`;
+      if (hits >= 3) g.hands.deed(`led the hunt that killed ${this.name || 'the cat'}`, true);
       g.onChime(true);
     } else {
       const victim = f.party[(Math.random() * f.party.length) | 0];
+      if (hits <= 1) g.hands.hurtLeader('a mauling');
       victim.hurt = true; victim.heal = 900; g.health.worsen(victim, 'a mauling'); g.health.worsen(victim, 'a mauling');
       this.bold++; this.visible = false;
       S.toast(`${this.name || 'The cat'} mauled ${victim.per.name} and got away.`, 'bad', victim);

@@ -2,6 +2,7 @@ import { has } from './persona';
 import { Person, Pose, Pt } from './people';
 import { BKind, BUILD } from './buildings';
 import { rumorError } from './scouting';
+import { dirWants } from './meeting';
 import type { Group } from './group';
 
 const pickOf = <T,>(a: T[]) => a[(Math.random() * a.length) | 0];
@@ -164,7 +165,7 @@ export class Requests {
     const g = this.g;
     const cands = g.people.filter(p => this.free(p, L));
     if (!cands.length) return;
-    const makers = [...(this.g.era !== 'crash' ? [this.suggestBuild, this.suggestBuild] : []), this.huntCat, this.pair, this.hoard, this.dispute, this.ration, this.whyThem, this.fish, this.signal, this.wreck, this.rainCatcher, this.lookout, this.sos, this.rescue]
+    const makers = [...(this.g.era !== 'crash' ? [this.suggestBuild, this.suggestBuild] : []), this.huntCat, this.pair, this.whyThem, this.fish, this.signal, this.wreck, this.rainCatcher, this.lookout, this.sos, this.rescue]
       .sort(() => Math.random() - 0.5);
     for (const p of [...cands].sort(() => Math.random() - 0.5)) for (const mk of makers) {
       const r = mk.call(this, p);
@@ -181,7 +182,7 @@ export class Requests {
 
   /** Free to come and talk: awake, well, not busy with something else. */
   private free(p: Person, L: Person) {
-    return p !== L && !p.hurt && p.health < 2 && !this.g.canoe.apart(p, L) && p.act !== 'funeral' && p.act !== 'gather' && p.act !== 'haul' && p.pose !== 'sleep' && !this.busy(p) && !p.kid &&
+    return p !== L && !p.alone && !p.hurt && p.health < 2 && !this.g.canoe.apart(p, L) && p.act !== 'funeral' && p.act !== 'gather' && p.act !== 'haul' && p.pose !== 'sleep' && !this.busy(p) && !p.kid &&
       (p.mode === 'follow' || p.mode === 'wait' || (p.mode === 'camp' && Math.hypot(p.x - L.x, p.z - L.z) < 70 && p.act !== 'huddle'));
   }
   private open(r: Req) {
@@ -354,6 +355,11 @@ export class Requests {
     const g = this.g, S = g.story, w = g.camp.wanted();
     if (!w.length || p.mode !== 'camp') return null;
     const [kind, line, sk] = w.find(x => x[2] === p.per.skill) ?? w[(Math.random() * w.length) | 0];
+    // the camp is already heading this way: no need to ask
+    if (dirWants(g.meeting.dir, kind)) {
+      if (g.camp.queue.length < 3 && !g.camp.planned(kind) && g.camp.add(kind, true)) { S.say(p, `I'm starting on ${BUILD[kind].label}.`, 2.5); S.log(`${p.per.name} started on ${BUILD[kind].label}.`); p.job = 'build'; p.wph = ''; }
+      return null;
+    }
     const good = this.chance(p, 0.6, [[has(p.per, 'lazy'), 0.4], [has(p.per, 'liar'), 0.35], [has(p.per, 'hardworking'), 0.75], [p.per.skill === sk || p.per.skill === 'builder', 0.95]]);
     const t = this.pitch(good, line);
     return this.req(p, 'idea', t.text, good, [
@@ -379,18 +385,6 @@ export class Requests {
     ], () => { S.mood(p, 'sad', 15); S.trust(p, -1); }, scared);
   }
 
-  private ration(p: Person) {
-    const g = this.g, S = g.story;
-    if (g.stock.ration > 0 || g.stock.totalFood > g.people.length * 1.2 || !(has(p.per, 'kind') || has(p.per, 'calm') || has(p.per, 'hardworking'))) return null;
-    return this.req(p, 'question', 'The food is running low. Should we cut everyone to half portions for a while?', true, [
-      { label: 'HALF PORTIONS', fn: () => {
-        g.stock.ration = 3; S.say(p, "It's the right call."); S.trust(p, 2); S.log('We went on half portions.');
-        for (const o of g.people) if (has(o.per, 'selfish') || has(o.per, 'hothead')) { S.mood(o, 'angry', 20); S.trust(o, -2); }
-      } },
-      { label: 'WE EAT', fn: () => { S.say(p, "Okay. I hope you're right."); S.trust(p, -1); for (const o of g.people) if (has(o.per, 'selfish')) S.trust(o, 1); } },
-    ], () => {});
-  }
-
   private whyThem(p: Person) {
     const g = this.g, S = g.story, t = g.scouting.trips.find(x => x.p !== p);
     if (!t || !(has(p.per, 'brave') || has(p.per, 'curious')) || p.per.trust < 30) return null;
@@ -399,59 +393,6 @@ export class Requests {
       { label: `${o.per.name.toUpperCase()} IS BETTER`, fn: () => { S.say(p, 'Right. Sure.'); S.trust(p, -2); if (has(p.per, 'hothead')) S.addRel(p, o, -6); } },
       { label: 'I NEED YOU HERE', fn: () => { const ok = has(p.per, 'hardworking') || has(p.per, 'kind'); S.say(p, ok ? 'Okay. That means something.' : 'Doing what, exactly?'); S.trust(p, ok ? 3 : 0); } },
     ], () => S.trust(p, -1));
-  }
-
-  private dispute(p: Person) {
-    const g = this.g, S = g.story, L = g.leader!;
-    if (p.mode !== 'camp') return null;
-    const o = g.people.find(x => x !== p && x !== L && x.mode === 'camp' && !x.hurt && S.rel(p, x) < -25);
-    if (!o) return null;
-    const lie = has(p.per, 'liar') && Math.random() < 0.6, thing = pickOf(['shoes', 'blanket', 'spot under the lean-to', 'water bottle', 'jacket']);
-    const N = p.per.name, O = o.per.name;
-    const side = (win: Person, lose: Person) => {
-      S.trust(win, 4); S.trust(lose, -5); S.addRel(win, lose, -5); S.mood(lose, 'angry', 25);
-      S.say(lose, pickOf(['Unbelievable.', 'Of course.', 'Fine. Whatever.']));
-      // people who don't trust you take the other side
-      for (const x of g.people) if (x !== win && x !== lose && x !== L && x.per.trust < 30 && S.rel(x, lose) > 5) { S.trust(x, -2); S.addRel(x, win, -3); setTimeout(() => S.say(x, "That's not fair."), 1800); }
-    };
-    return this.req(p, 'dispute', `${O} took my ${thing}! Tell them to give it back.`, !lie, [
-      { label: `GIVE IT BACK, ${O.toUpperCase()}`, fn: () => {
-        if (lie) {
-          side(p, o);
-          setTimeout(() => { S.say(o, `I never touched ${N}'s ${thing}!`); S.toast(`Turns out ${N} made it up. ${O} never took anything.`, 'bad', p); S.log(`${N} lied about ${O} taking their ${thing}. You took ${N}'s side.`); for (const x of g.people) if (x !== p) S.addRel(x, p, -4); S.trust(o, -4); }, 6000);
-          const rec = this.record.get(p.id) ?? { good: 0, bad: 0 }; rec.bad++; this.record.set(p.id, rec);
-        } else { side(p, o); S.say(p, 'Thank you.'); S.log(`${O} took ${N}'s ${thing}. You made them give it back.`); }
-      } },
-      { label: 'SORT IT OUT', fn: () => {
-        S.trust(p, -1); S.say(p, 'Great. Thanks.');
-        if (Math.random() < 0.5) { p.act = 'argue'; p.partner = o; p.actT = 5; o.act = 'argue'; o.partner = p; o.actT = 5; o.path = []; S.addRel(p, o, -5); }
-        else S.addRel(p, o, 4);
-      } },
-      { label: `LEAVE ${O.toUpperCase()} ALONE`, fn: () => { side(o, p); if (lie) { S.log(`${N} accused ${O} of taking their ${thing}. You didn't buy it.`); S.trust(p, 2); } } },
-    ], () => { S.trust(p, -1); if (Math.random() < 0.5) { p.act = 'argue'; p.partner = o; p.actT = 5; o.act = 'argue'; o.partner = p; o.actT = 5; o.path = []; } });
-  }
-
-  private hoard(p: Person) {
-    const g = this.g, S = g.story, L = g.leader!;
-    const h = g.people.find(x => x.per.secret === 'hoarder' && !S.secretKnown.has(x.id) && x !== p && x !== L);
-    if (!h || g.stock.stolen < 4) return null;
-    // a liar might point at someone they just don't like
-    const lie = has(p.per, 'liar') && Math.random() < 0.5;
-    const who = lie ? (g.people.find(x => x !== p && x !== L && x !== h && S.rel(p, x) < 0) ?? h) : h;
-    if (!lie && !(has(p.per, 'honest') || has(p.per, 'kind') || has(p.per, 'hardworking') || Math.random() < 0.3)) return null;
-    const real = who === h, W = who.per.name;
-    return this.req(p, 'secret', `I saw ${W} hiding food under the lean-to. Our food.`, real, [
-      { label: 'CONFRONT THEM', fn: () => {
-        if (real) { S.say(h, '...'); S.revealSecret(h); g.stock.add('snacks', g.stock.stolen); g.stock.stolen = 0; S.trust(p, 3); }
-        else {
-          S.say(who, 'What? I never took anything!'); S.trust(who, -8); S.mood(who, 'angry', 30);
-          S.toast(`${W} had nothing. ${p.per.name} made it up.`, 'bad', p); S.log(`${p.per.name} accused ${W} of stealing food. There was nothing there.`);
-          for (const x of g.people) if (x !== p) S.addRel(x, p, -5);
-          const rec = this.record.get(p.id) ?? { good: 0, bad: 0 }; rec.bad++; this.record.set(p.id, rec);
-        }
-      } },
-      { label: 'LET IT GO', fn: () => { S.say(p, real ? 'Fine. Starve, then.' : 'Okay...'); if (real) S.trust(p, -2); } },
-    ], () => {});
   }
 
   private pair(p: Person) {

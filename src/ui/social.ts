@@ -13,6 +13,7 @@ import { objectives } from '../life/objectives';
 import { JOB, JOB_KINDS, JobKind, LEVEL_WORD, PRIO_WORD, level } from '../life/jobs';
 import { BUILD } from '../life/buildings';
 import { HEALTH_WORD } from '../life/health';
+import { DIRS, DIR_INFO, Dir } from '../life/meeting';
 import { drawIslandMap } from './islandmap';
 import { mapImage } from './hud';
 import { N } from '../world/island';
@@ -120,7 +121,7 @@ const CSS = `
 .ask .who { font: 500 13px var(--hd); letter-spacing: 2px; color: #8a6420; margin-bottom: 4px; }
 .ask .acts { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
 .ask .x { position: absolute; right: 8px; top: 4px; color: #8a8478; font-size: 16px; }
-#goal { left: 50%; top: 70px; transform: translateX(-50%); display: none; flex-direction: column; align-items: center; gap: 10px; }
+#goal { z-index: 8; left: 50%; top: 70px; transform: translateX(-50%); display: none; flex-direction: column; align-items: center; gap: 10px; }
 #goal.open { display: flex; }
 #goal h2 { font: 500 20px var(--hd); letter-spacing: 4px; margin: 0; text-shadow: 0 2px 8px #000; }
 #goal .cards { display: flex; gap: 10px; }
@@ -129,6 +130,13 @@ const CSS = `
 #goal .c canvas { image-rendering: pixelated; width: 40px; height: 52px; display: block; margin: 0 auto 4px; }
 #goal .c h3 { font: 500 15px var(--hd); letter-spacing: 1.5px; color: var(--gold); margin: 0 0 4px; }
 #goal .c .q { font-style: italic; }
+#goal .rep { font-size: 15px; line-height: 1.5; max-width: 660px; background: var(--sl); border-radius: 3px; padding: 8px 14px; }
+#goal .rep b { font: 500 13px var(--hd); letter-spacing: 1px; color: var(--gold); font-weight: 500; }
+.dirs { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; align-items: center; }
+.dirs .lb { font: 500 12px var(--hd); letter-spacing: 2px; color: var(--dim); margin-right: 6px; }
+.dirs button { font: 500 12px var(--hd); letter-spacing: 1.2px; padding: 6px 9px; }
+.dirs button.on { color: var(--gold); border-bottom-color: var(--gold); }
+#goal .dl { font-size: 13px; color: var(--dim); font-style: italic; min-height: 1em; }
 #goal .bar { width: 300px; height: 3px; background: var(--sl); overflow: hidden; }
 #goal .bar i { display: block; height: 100%; background: var(--gold); }
 #today { left: 14px; top: 152px; font-size: 15px; padding: 10px 14px; line-height: 1.45; display: none; max-width: 310px; border-left: 3px solid var(--gold); }
@@ -398,7 +406,7 @@ export class Social {
     const esc = (t: string) => t.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
     const obHtml = this.obDone.map(d => `<div class="ob done">✓ ${esc(d.text)}</div>`).join('') +
       obs.map(o => o.x !== undefined ? `<div class="ob at" data-x="${o.x.toFixed(1)}" data-z="${o.z!.toFixed(1)}">› ${esc(o.text)} ${ic('focus-2', 'var(--gold)')}</div>` : `<div class="ob">› ${esc(o.text)}</div>`).join('');
-    const tw = `${cur ? `<div class="st">TODAY <b>${cur.title}</b></div>` : g.goals.opts.length ? '<div class="st">TODAY <b>DECIDING…</b></div>' : ''}<div class="st">${ic('fish')} FOOD <b>${st.word(st.totalFood, n).toUpperCase()}</b> &nbsp; ${ic('droplet')} WATER <b>${st.word(st.water, n).toUpperCase()}</b>${st.ration ? ' &nbsp; HALF RATIONS' : ''}</div><div class="gh">GOALS</div>${obHtml}`;
+    const tw = `${g.goals.opts.length ? '<div class="st">TONIGHT <b>MEETING AT THE FIRE</b></div>' : g.goals.next ? `<div class="st">TOMORROW <b>${g.goals.next.title}</b></div>` : cur ? `<div class="st">TODAY <b>${cur.title}</b></div>` : ''}<div class="st">${ic('fish')} FOOD <b>${st.word(st.totalFood, n).toUpperCase()}</b> &nbsp; ${ic('droplet')} WATER <b>${st.word(st.water, n).toUpperCase()}</b>${st.ration ? ' &nbsp; HALF RATIONS' : ''}</div><div class="gh">GOALS</div>${obHtml}`;
     if (this.todayKey !== tw) { this.todayKey = tw; this.todayEl.innerHTML = tw; }
     const party = this.lead.querySelector('.party') as HTMLElement;
     const list = [...g.party, ...g.people.filter(p => p.mode === 'rescued'), ...g.scouts, ...(g.crew.out ? [] : g.people.filter(p => p.crew && p.mode === 'camp'))];
@@ -540,6 +548,22 @@ export class Social {
     setTimeout(() => { if (!fin && document.activeElement !== inp) done(); }, 45000);
   }
 
+  /** Which way the camp is heading: buttons that set it, and a line saying what that means. */
+  private dirRow() {
+    const M = this.game.group.meeting;
+    return `<div class="dirs"><span class="lb">HEADING</span>${DIRS.map(d => `<button class="btn${M.dir === d ? ' on' : ''}" data-d="${d}" title="${DIR_INFO[d].line}">${ic(DIR_INFO[d].icon)} ${DIR_INFO[d].label.toUpperCase()}</button>`).join('')}</div>`;
+  }
+  private wireDirs(root: HTMLElement) {
+    const M = this.game.group.meeting, line = root.querySelector('.dl') as HTMLElement | null;
+    if (line) line.textContent = DIR_INFO[M.dir].line;
+    root.querySelectorAll('[data-d]').forEach(b => {
+      const d = (b as HTMLElement).dataset.d as Dir;
+      (b as HTMLElement).onclick = (e) => { e.stopPropagation(); M.setDir(d); root.querySelectorAll('[data-d]').forEach(x => x.classList.toggle('on', (x as HTMLElement).dataset.d === d)); if (line) line.textContent = DIR_INFO[d].line; this.ovKey = ''; };
+      (b as HTMLElement).onmouseenter = () => { if (line) line.textContent = DIR_INFO[d].line; };
+      (b as HTMLElement).onmouseleave = () => { if (line) line.textContent = DIR_INFO[M.dir].line; };
+    });
+  }
+
   /** The whole camp on one page, all in words. */
   private fillOverview() {
     const g = this.game.group, C = g.camp, st = g.stock, V = g.village, n = g.people.filter(p => p.mode !== 'dead').length;
@@ -561,7 +585,7 @@ export class Social {
     for (const p of g.jobs.problems()) coming.push(`${ic('alert-circle')} ${esc(p.text)}`);
     const dis = IDEAS.filter(k => g.ideas.s[k].state !== 'none');
     const T = st.tools, tw = (v: number) => v <= 0 ? 'none' : v === 1 ? 'one' : v < 4 ? 'a few' : 'plenty';
-    const html = `${CLOSE}<h4>${V.name ? `THE VILLAGE OF ${esc(V.name.toUpperCase())} <span>— founded on day ${V.founded}</span>` : g.era === 'camp' ? 'THE CAMP' : 'THE CRASH SITE'}</h4><div class="cols"><div>
+    const html = `${CLOSE}<h4>${V.name ? `THE VILLAGE OF ${esc(V.name.toUpperCase())} <span>— founded on day ${V.founded}</span>` : g.era === 'camp' ? 'THE CAMP' : 'THE CRASH SITE'}</h4>${this.dirRow()}<div class="dl" style="text-align:center;color:var(--dim);font-style:italic;font-size:13px;margin:4px 0 8px"></div><div class="cols"><div>
       <h5>WHERE EVERYONE IS</h5>
       <div class="ln"><b>Working</b> ${names(working)}</div><div class="ln"><b>With you</b> ${names(out)}</div><div class="ln"><b>Scouting</b> ${names(scouts)}</div>
       <div class="ln"><b>Sick or hurt</b> ${names(sick)}</div><div class="ln"><b>Free</b> ${names(resting)}</div>
@@ -581,6 +605,7 @@ export class Social {
       </div></div>`;
     if (html === this.ovKey) return;
     this.ovKey = html; this.overview.innerHTML = html;
+    this.wireDirs(this.overview);
   }
 
   private familyLines() {
@@ -711,14 +736,17 @@ export class Social {
     this.askEl.style.left = `${Math.max(160, Math.min(innerWidth - 160, s.x))}px`; this.askEl.style.top = `${Math.max(120, s.y - 28 * z)}px`;
   }
 
-  /** Morning plan: three cards, one click. Time crawls while they are up; nobody picks in 30 s → the most trusted idea wins. */
+  /** Evening meeting: how it went, three cards for tomorrow, the heading. One click. Time crawls while they are up; nobody picks in 30 s → the most trusted idea wins. */
   private drawGoal(dt: number) {
     const G = this.game.group.goals, opts = G.opts;
     if (!opts.length) { if (this.goalKey) { this.goalKey = ''; this.goalEl.classList.remove('open'); } return; }
     const key = opts.map(o => o.who.id + o.title).join();
     if (key !== this.goalKey) {
       this.goalKey = key; this.goalT = 30;
-      this.goalEl.innerHTML = (this.game.group.recap ? `<div class="recap"><b style="color:#ffd65a;font-weight:normal">YESTERDAY:</b> ${this.game.group.recap}</div>` : '') + '<h2>WHAT DO WE DO TODAY?</h2><div class="cards box" style="background:none;border:0;box-shadow:none"></div><div class="bar"><i></i></div>';
+      const esc = (t: string) => t.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`), M = this.game.group.meeting;
+      const rep = M.reports.map(r => `<div><b>${esc(r.who.per.name.toUpperCase())}</b> ${esc(r.text)}</div>`).join('');
+      this.goalEl.innerHTML = (rep ? `<div class="rep">${rep}</div>` : '') + `<h2>WHAT DO WE DO TOMORROW?</h2><div class="cards box" style="background:none;border:0;box-shadow:none"></div>${this.dirRow()}<div class="dl"></div><div class="bar"><i></i></div>`;
+      this.wireDirs(this.goalEl);
       const cards = this.goalEl.querySelector('.cards') as HTMLElement;
       opts.forEach((o, i) => {
         const c = this.el(`<div class="c box"><h3></h3><div class="q"></div><div style="opacity:.7;margin-top:4px"></div></div>`, cards);

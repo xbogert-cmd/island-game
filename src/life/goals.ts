@@ -10,10 +10,12 @@ const pickOf = <T,>(a: T[]) => a[(Math.random() * a.length) | 0];
 export type GoalKind = 'explore' | 'food' | 'water' | 'rest' | 'build' | 'salvage' | 'mend' | 'search' | 'hunt' | 'prepare';
 export interface GoalOpt { kind: GoalKind; who: Person; title: string; line: string; x?: number; z?: number; prop?: BKind; a?: Person; b?: Person }
 
-/** The group's plan for the day: three people pitch at dawn, you pick one (or the most trusted wins). */
+/** The group's plan for tomorrow: three people pitch it at the evening meeting, you pick one (or the most trusted wins). It starts at dawn. */
 export class Goals {
   opts: GoalOpt[] = [];
   cur: GoalOpt | null = null;
+  /** picked at the meeting, starts in the morning */
+  next: GoalOpt | null = null;
   private judged = true;
   private day = 0;
   private start = 0;
@@ -28,8 +30,9 @@ export class Goals {
   update() {
     const g = this.g, h = g.clock.hour;
     if (!g.leader) return;
-    if (this.day !== g.clock.day && h >= 7 && h < 11 && this.offer()) this.day = g.clock.day;    // retried until enough people are up
-    if (this.opts.length && h >= 11) this.autoPick();
+    // the morning: yesterday evening's pick starts
+    if (this.next && this.day !== g.clock.day && h >= 6.5 && h < 18) { this.day = g.clock.day; const o = this.next; this.next = null; this.cur = o; this.judged = false; this.start = g.clock.minutes; g.stock.today = { food: 0, water: 0 }; this.begin(o); }
+    if (this.opts.length && (h >= 22 || h < 6)) this.autoPick();
     if (this.cur && !this.judged && h >= 18.5) this.judge();
   }
 
@@ -49,26 +52,28 @@ export class Goals {
       const n = (this.ignored.get(x.who.id) ?? 0) + 1; this.ignored.set(x.who.id, n);
       if (n >= 3) { this.ignored.set(x.who.id, 0); S.trust(x.who, -2); S.mood(x.who, 'angry', 30); g.requests.gripes.push({ p: x.who, text: 'Three days now. Nobody ever listens to me.' }); }
     }
-    this.opts = []; this.cur = o; this.judged = false; this.start = g.clock.minutes;
-    g.stock.today = { food: 0, water: 0 };
+    this.opts = []; this.next = o; this.day = -1;
     for (const p of g.people) if (p.act === 'huddle') { p.act = ''; p.actT = 1 + Math.random() * 3; if (Math.random() < 0.5) { p.poseO = 'cheer'; p.poseT = 1.2; } }
-    S.trust(o.who, 2); S.mood(o.who, 'happy', 20); S.say(o.who, pickOf(["Let's do it!", 'Good. Come on, everyone.', 'Right!']));
-    S.log(`Today's plan, ${o.who.per.name}'s idea: ${o.title.toLowerCase()}.`);
-    this.begin(o);
+    S.trust(o.who, 2); S.mood(o.who, 'happy', 20); S.say(o.who, pickOf(["First thing tomorrow, then.", 'Good. We start at sunrise.', 'Right!']));
+    S.log(`Tomorrow's plan, ${o.who.per.name}'s idea: ${o.title.toLowerCase()}.`);
+    // a storm or a missing person can't wait for morning
+    if (o.kind === 'prepare' && g.village.stormIn === 0 || o.kind === 'search') { this.next = null; this.cur = o; this.judged = false; this.start = g.clock.minutes; this.begin(o); }
+    g.meeting.picked();
   }
 
-  autoPick() {
+  /** Nobody picked (or you weren't there): the most trusted idea wins. */
+  autoPick(away = false) {
     if (!this.opts.length) return;
     let bi = 0; this.opts.forEach((o, i) => { if (o.who.per.trust > this.opts[bi].who.per.trust) bi = i; });
-    this.g.story.toast(`Nobody decided, so they went with ${this.opts[bi].who.per.name}'s plan.`, 'info', this.opts[bi].who);
+    this.g.story.toast(away ? `The camp met without you and went with ${this.opts[bi].who.per.name}'s plan.` : `Nobody decided, so they went with ${this.opts[bi].who.per.name}'s plan.`, 'info', this.opts[bi].who);
     this.choose(bi);
   }
 
   // ------------------------------------------------------------------
 
-  private offer(): boolean {
+  offer(): boolean {
     const g = this.g, S = g.story, L = g.leader!, R = g.requests;
-    const pool = g.people.filter(p => p !== L && !p.kid && !p.hurt && p.health < 2 && (p.mode === 'camp' || p.mode === 'follow' || p.mode === 'wait'));
+    const pool = g.people.filter(p => p !== L && !p.kid && !p.alone && !p.hurt && p.health < 2 && (p.mode === 'camp' || p.mode === 'follow' || p.mode === 'wait'));
     if (pool.length < 3) return false;
     const used = new Set<Person>();
     const pitcher = (likes: Trait[], skill?: string, not: Person[] = []) => {
@@ -118,10 +123,11 @@ export class Goals {
       const a = (i / at.length) * 6.28 + 0.4, r = 3 + (i % 2);
       p.act = 'huddle'; p.carry = 0; p.partner = null; g.bodies.go(p, F.x + Math.cos(a) * r, F.z + Math.sin(a) * r);
     });
-    out.forEach((o, i) => setTimeout(() => { if (this.opts.includes(o)) { S.say(o.who, o.line, 4.5); o.who.poseO = 'point'; o.who.poseT = 1.5; } }, 1500 + i * 2600));
-    S.log(`Morning. Everyone gathered at the fire to decide what to do today.`);
+    const after = g.meeting.reports.length * 2400;      // first how the day went, then the pitches
+    out.forEach((o, i) => setTimeout(() => { if (this.opts.includes(o)) { S.say(o.who, o.line, 4.5); o.who.poseO = 'point'; o.who.poseT = 1.5; } }, 1500 + after + i * 2600));
+    S.log(`Evening. Everyone gathered at the fire to talk about the day and decide on tomorrow.`);
     g.onAsk();
-    g.hint('goal', 'Every morning the group suggests a plan for the day. Pick one, and camp works on it by itself.');
+    g.hint('goal', 'Every evening the camp meets at the fire. Pick tomorrow\'s plan, and set which way the camp is heading. They do the rest.');
     return true;
   }
 

@@ -5,6 +5,7 @@ import { Hud } from './ui/hud';
 import { ZOOMS } from './render/camera';
 import { Input } from './ui/input';
 import { Social } from './ui/social';
+import { Action } from './ui/action';
 import { LAST, autosave } from './life/save';
 
 const params = new URLSearchParams(location.search);
@@ -22,6 +23,7 @@ requestAnimationFrame(() => setTimeout(() => {
   game.fx.onThunder = (d) => audio.thunder(d);
   const input = new Input(game, game.canvas);
   const social = new Social(game, input);
+  new Action(game, input);
   const g = game.group;
   g.onWhistle = () => audio.whistle();
   g.onAlarm = () => audio.alarm();

@@ -62,6 +62,7 @@ export class Game {
     this.particles = new Particles(this.batch);
     this.wildlife = new Wildlife(world, this.batch, this.particles);
     this.group = new Group(world, this.clock, this.weather, this.particles);
+    this.group.hands.setWild(this.wildlife);
     this.camp3d = new Camp3D(world, this.group.fire);
     this.scene.add(new Terrain(world).group, new Water(world).group, this.veg.group, this.props.group, this.camp3d.group, this.fx.group, this.batch.mesh, this.group.bodies.batch.mesh, this.group.bodies.batch.silhouette(), ...this.group.bodies.lights);
     for (const r of world.rivers) for (const k of r.falls) { const p = r.pts[Math.min(r.pts.length - 1, k + 1)]; this.falls.push({ x: p.x, y: p.y, z: p.z }); }
@@ -209,7 +210,21 @@ export class Game {
     for (const tr of g.scouting.trips) for (let i = 0; i < tr.trail.length; i += 1) {
       const q = tr.trail[i]; if (!near(q.x, q.z)) continue;
       b.push(q.x, heightAt(w, q.x, q.z) + 0.06, q.z, ATLAS.dot2[0], false, 1, 0.95, 0.75, 2, true);
+    }    this.drawHands(near);
+  }
+
+  /** Spears in the air, kills hung by the fire, places you could climb, a missing person's tracks. */
+  private drawHands(near: (x: number, z: number) => boolean) {
+    const g = this.group, H = g.hands, b = this.batch, w = this.world, L = g.leader, tt = U.uTime.value;
+    for (const s of H.spears) {
+      const k = Math.min(1, s.t / s.T), d = Math.hypot(s.tx - s.fx, s.tz - s.fz);
+      const y = heightAt(w, s.fx, s.fz) + 1.3 + (Math.max(0, heightAt(w, s.tx, s.tz)) - heightAt(w, s.fx, s.fz) - 1.1) * k + Math.sin(Math.PI * k) * d * 0.22;
+      b.push(s.x, y, s.z, ATLAS.spear[0], (s.tx - s.fx) * U.uCamRight.value.x + (s.tz - s.fz) * U.uCamRight.value.z < 0);
     }
+    H.trophies.forEach((k, i) => { const x = g.fire.x - 3.5 + i * 1.6, z = g.fire.z - 4.2; if (near(x, z)) b.push(x, heightAt(w, x, z) - 0.05, z, ATLAS[k === 'deer' ? 'trophyDeer' : 'trophyBoar'][0]); });
+    if (L) for (const s of H.spots) if (Math.hypot(s.x - L.x, s.z - L.z) < 28) b.push(s.x, heightAt(w, s.x, s.z) + 2.2 + Math.sin(tt * 2) * 0.15, s.z, ATLAS.climb[0], false, s.climbed ? 0.7 : 1, s.climbed ? 0.7 : 1, s.climbed ? 0.7 : 1, 2);
+    const m = H.missing;
+    if (m) m.tracks.forEach((q, i) => { if (near(q.x, q.z)) b.push(q.x + (i % 2 ? 0.25 : -0.25), heightAt(w, q.x, q.z) + 0.04, q.z, ATLAS.paw[0], false, 0.75, 0.6, 0.45, 0.8, true); });
   }
 
   /** The food and water pile by the fire (one heap per kind, size = how much), and what people built. */

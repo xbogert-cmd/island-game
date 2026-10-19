@@ -17,7 +17,7 @@ export function objectives(g: Group): Objective[] {
   if (g.cat.hunting) out.push({ key: 'hunt', text: `Hunt ${g.cat.name || 'the cat'}: take a party to its lair (red ring)`, x: g.cat.lair.x, z: g.cat.lair.z });
   const r = g.requests.cur;
   if (r) out.push({ key: 'ask', text: `${r.p.per.name} wants to talk`, x: r.p.x, z: r.p.z });
-  if (g.goals.opts.length) out.push({ key: 'plan', text: 'Pick a plan for today' });
+  if (g.goals.opts.length) out.push({ key: 'plan', text: 'Pick tomorrow\'s plan at the fire' });
   // the camp's own problems: things to fix
   for (const pr of g.jobs.problems().slice(0, 2)) out.push(pr);
   for (const p of g.people) if (p.hurt && p.mode === 'camp' && !g.camp.has('sickbay') && g.era !== 'crash' && !g.camp.planned('sickbay')) { out.push({ key: 'hurt' + p.id, text: `${p.per.name} is hurt: a sick bay would help` }); break; }

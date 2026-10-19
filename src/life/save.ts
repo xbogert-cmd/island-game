@@ -33,7 +33,7 @@ export function save(game: Game) {
     people: g.people.map(p => ({
       x: p.x, z: p.z, mode: p.mode, face: p.face, trust: p.per.trust, weakness: p.per.weakness, hurt: p.hurt, heal: p.heal, hungry: p.hungry,
       xp: p.xp, pin: p.pin, sleepIn: p.sleepIn, savedBy: p.savedBy, apart: p.apart, hateT: p.hateT, health: p.health, hungerN: p.hungerN,
-      crew: p.crew, outAt: p.outAt, tripAt: p.tripAt, tiredN: p.tiredN, haul: p.haul, keeps: p.keeps, kid: p.kid, born: p.born, couple: p.couple, name: p.per.name, age: p.per.age,
+      crew: p.crew, outAt: p.outAt, tripAt: p.tripAt, tiredN: p.tiredN, haul: p.haul, keeps: p.keeps, kid: p.kid, born: p.born, couple: p.couple, name: p.per.name, age: p.per.age, alone: p.alone, cut: p.cut,
       troubleT: g.scouting.tripOf(p)?.troubleT ?? 0,
     })),
     rel: Array.from(g.story.relM), journal: g.story.journal, skillKnown: [...g.story.skillKnown], secretKnown: [...g.story.secretKnown],
@@ -54,7 +54,8 @@ export function save(game: Game) {
     camp: { list: g.camp.list, queue: g.camp.queue.map(b => b.id), nid: (g.camp as Any).nid },
     jobs: { prio: g.jobs.prio, seen: [...g.jobs.seen], likeKnown: [...g.jobs.likeKnown] },
     requests: { record: [...g.requests.record], wreckDone: g.requests.wreckDone, gripes: g.requests.gripes.map(x => ({ p: x.p.id, text: x.text })) },
-    goals: { day: G.day, judged: G.judged, start: G.start, ignored: [...G.ignored], cur: G.cur ? { ...G.cur, who: G.cur.who.id, a: G.cur.a?.id, b: G.cur.b?.id } : null, planned: G.planned?.id ?? -1 },
+    goals: { day: G.day, judged: G.judged, start: G.start, ignored: [...G.ignored], cur: G.cur ? { ...G.cur, who: G.cur.who.id, a: G.cur.a?.id, b: G.cur.b?.id } : null, next: G.next ? { ...G.next, who: G.next.who.id, a: G.next.a?.id, b: G.next.b?.id } : null, planned: G.planned?.id ?? -1 },
+    hands: g.hands.state(), meeting: g.meeting.state(),
   };
   try { localStorage.setItem(KEY(game.world.seed), JSON.stringify(data)); localStorage.setItem(LAST, String(game.world.seed)); } catch { /* full or private */ }
 }
@@ -85,7 +86,8 @@ export function load(game: Game): boolean {
   g.requests.gripes = s.requests.gripes.map((x: Any) => ({ p: P[x.p], text: x.text }));
   const G = g.goals as Any;
   G.day = s.goals.day; G.judged = s.goals.judged; G.start = s.goals.start; G.ignored = new Map(s.goals.ignored);
-  G.cur = s.goals.cur ? { ...s.goals.cur, who: P[s.goals.cur.who], a: s.goals.cur.a !== undefined ? P[s.goals.cur.a] : undefined, b: s.goals.cur.b !== undefined ? P[s.goals.cur.b] : undefined } : null;
+  const opt = (o: Any) => o ? { ...o, who: P[o.who], a: o.a !== undefined ? P[o.a] : undefined, b: o.b !== undefined ? P[o.b] : undefined } : null;
+  G.cur = opt(s.goals.cur); G.next = opt(s.goals.next);
   G.planned = g.camp.list.find(b => b.id === s.goals.planned) ?? null;
   // people: scouts made it home while you were away; the lost and hurt are still out there
   s.people.forEach((d: Any, i: number) => {
@@ -93,6 +95,7 @@ export function load(game: Game): boolean {
     Object.assign(p, { x: d.x, z: d.z, face: d.face, hurt: d.hurt, heal: d.heal, hungry: d.hungry, xp: d.xp, pin: d.pin, sleepIn: d.sleepIn, savedBy: d.savedBy, apart: d.apart, hateT: d.hateT, health: d.health ?? 0, hungerN: d.hungerN ?? 0 });
     if (d.keeps) Object.assign(p, { crew: d.crew, outAt: d.outAt, tripAt: d.tripAt, tiredN: d.tiredN, haul: d.haul, keeps: d.keeps });
     if (d.born !== undefined) { Object.assign(p, { kid: d.kid, born: d.born, couple: d.couple }); p.per.name = d.name; p.per.age = d.age; }
+    p.alone = d.alone ?? 0; p.cut = d.cut ?? 0;
     p.per.trust = d.trust; p.per.weakness = d.weakness;
     let mode: Mode = d.mode;
     if (mode === 'scout') { mode = 'camp'; const q = g.grid.nearest(g.fire.x + Math.random() * 6 - 3, g.fire.z + Math.random() * 6 - 3); if (q) { p.x = q.x; p.z = q.z; } }
@@ -119,6 +122,8 @@ export function load(game: Game): boolean {
   if (s.traditions) { g.traditions.list = s.traditions.list; g.traditions.asked = s.traditions.asked.filter((k: string) => s.traditions.list.some((t: Any) => t.kind === k)); }
   if (s.politics) Object.assign(g.politics, s.politics);
   g.health.dryN = s.dryN ?? 0;
+  if (s.hands) g.hands.restore(s.hands);
+  if (s.meeting) g.meeting.restore(s.meeting);
   // nobody wakes up at sea
   for (const p of P) if (p.mode !== 'dead' && !g.grid.walkable(p.x, p.z)) { const q = g.grid.nearest(p.x, p.z); if (q) { p.x = q.x; p.z = q.z; } }
   g.crew.out = g.crew.outside(g.leader.x, g.leader.z);

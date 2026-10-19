@@ -13,9 +13,23 @@ export class Input {
   mx = -1e4; my = -1e4;
   onPerson: (p: Person) => void = () => {};
   private v = new THREE.Vector3();
+  private aiming = false;
+  private lastUp = { t: 0, x: 0, y: 0 };
+  private hoverT = 0;
+  private overGame = false;
 
   constructor(private game: Game, el: HTMLCanvasElement) {
+    // press on an animal: draw the spear back instead of walking
+    game.rig.grab = (e) => {
+      const g = game.group; if (!g.leader || g.scoutPick || this.pick(e.clientX, e.clientY)) return false;
+      const q = this.ground(e.clientX, e.clientY);
+      if (q && g.hands.press(q.x, q.z)) { this.aiming = !!g.hands.aim; if (!this.aiming) this.lastUp.t = -1; return true; }
+      return false;
+    };
+    // let go anywhere (even over a menu) to throw
+    addEventListener('pointerup', (e) => { if (this.aiming) { this.aiming = false; game.group.hands.release(); e.stopPropagation(); } }, true);
     el.addEventListener('pointerup', (e) => {
+      if (this.lastUp.t < 0) { this.lastUp.t = 0; return; }     // that press walked you toward an animal
       if (e.button !== 0 || game.rig.dragged) return;
       const g = game.group; if (!g.leader) return;
       const p = this.pick(e.clientX, e.clientY);
@@ -23,13 +37,23 @@ export class Input {
       const sc = g.scoutPick ? null : this.trailAt(e.clientX, e.clientY);
       if (sc) { game.camWho = sc; game.rig.followOn = true; return; }
       const q = this.ground(e.clientX, e.clientY);
-      if (q) { g.clickGround(q.x, q.z); game.rig.followOn = true; this.ping(q.x, q.z); }
+      if (q) {
+        // a double-click runs (fast, but loud)
+        const now = performance.now(), dbl = now - this.lastUp.t < 330 && Math.hypot(e.clientX - this.lastUp.x, e.clientY - this.lastUp.y) < 30;
+        this.lastUp = { t: dbl ? 0 : now, x: e.clientX, y: e.clientY };
+        g.clickGround(q.x, q.z); g.hands.running = dbl; game.rig.followOn = true; this.ping(q.x, q.z);
+      }
     });
     el.addEventListener('contextmenu', (e) => { e.preventDefault(); game.group.whistle(); });
     el.addEventListener('pointermove', (e) => {
       this.mx = e.clientX; this.my = e.clientY;
+      const H = game.group.hands;
+      if (this.aiming) { const q = this.ground(e.clientX, e.clientY); if (q) H.move(q.x, q.z); el.style.cursor = 'crosshair'; return; }
       this.hover = game.group.leader ? this.pick(e.clientX, e.clientY) : null;
-      el.style.cursor = game.group.scoutPick ? 'crosshair' : this.hover || this.trailAt(e.clientX, e.clientY) ? 'pointer' : 'default';
+      // over something you could spear (checked a few times a second; the ground test isn't free)
+      const now = performance.now();
+      if (!this.hover && now - this.hoverT > 120 && game.group.leader && game.group.stock.tools.spear > 0) { this.hoverT = now; const q = this.ground(e.clientX, e.clientY); this.overGame = !!q && !!H.gameNear(q.x, q.z); }
+      el.style.cursor = game.group.scoutPick || this.overGame ? 'crosshair' : this.hover || this.trailAt(e.clientX, e.clientY) ? 'pointer' : 'default';
     });
   }
 

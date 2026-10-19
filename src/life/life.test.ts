@@ -10,6 +10,8 @@ import { BUILD, BKind, stageCost } from './buildings';
 import type { Person } from './people';
 import { Health } from './health';
 import { Crew } from './crew';
+import { DRAW, Hands, RANGE, judgeRing, landing } from './hands';
+import { Meeting, dirBonus, dirWants } from './meeting';
 import { Ideas } from './ideas';
 import { Village } from './village';
 
@@ -216,5 +218,53 @@ describe('life goes on (4b)', () => {
     expect(Politics.sway(kind, 'admit', 0)).toBeGreaterThan(Politics.sway(kind, 'push', 0));
     expect(Politics.sway(hot, 'push', 0)).toBeGreaterThan(Politics.sway(hot, 'admit', 0));
     expect(Politics.sway(kind, 'remind', 20)).toBeGreaterThan(Politics.sway(kind, 'remind', 0));
+  });
+});
+
+describe('the leader pass', () => {
+  it('a full draw lands on target; a quick throw falls short', () => {
+    const still = () => 0.5;
+    const full = landing(0, 0, 10, 0, DRAW, 0, still);
+    expect(full.x).toBeCloseTo(10); expect(full.z).toBeCloseTo(0); expect(full.short).toBe(false);
+    const quick = landing(0, 0, 10, 0, 0, 0, still);
+    expect(quick.x).toBeCloseTo(4); expect(quick.short).toBe(true);
+    expect(landing(0, 0, 30, 0, DRAW, 0, still).x).toBeCloseTo(RANGE);
+    // a half-drawn throw strays more than a full one
+    const wild = (held: number) => Math.abs(landing(0, 0, 10, 0, held, 0, () => 1).z);
+    expect(wild(DRAW * 0.3)).toBeGreaterThan(wild(DRAW));
+  });
+  it('timing rings: inside the band is good, near the middle perfect', () => {
+    expect(judgeRing(1, 10)).toBe('PERFECT');
+    expect(judgeRing(7, 10)).toBe('GOOD');
+    expect(judgeRing(12, 10)).toBe('MISS');
+  });
+  it('the direction moves hands between jobs, and picks builds', () => {
+    expect(dirBonus('food', 'fish', false)).toBe(1);
+    expect(dirBonus('comfort', 'wood', false)).toBe(-1);
+    expect(dirBonus('build', 'stone', true)).toBe(1);
+    expect(dirBonus('steady', 'water', false)).toBe(0);
+    expect(dirWants('defend', 'tower')).toBe(true);
+    expect(dirWants('defend', 'bath')).toBe(false);
+    expect(dirWants('build', 'bath')).toBe(true);
+  });
+  it('the leader only dies from getting hurt again while badly hurt', () => {
+    const L = { per: { name: 'Sam' }, hurt: false, health: 0, heal: 0, mode: 'leader' } as unknown as Person;
+    let died = false;
+    const g = { leader: L, story: { toast() {}, say() {}, log() {}, trustAll() {} }, hint() {}, health: { die: () => { died = true; }, worsen: (p: Person) => { p.health++; } } };
+    const H = Object.create(Hands.prototype) as Hands; (H as unknown as { g: unknown }).g = g;
+    H.hurtLeader('a fall'); expect(L.hurt).toBe(true); expect(died).toBe(false);
+    H.hurtLeader('a fall'); H.hurtLeader('a fall'); expect(L.health).toBe(2); expect(died).toBe(false);
+    H.hurtLeader('a fall'); expect(died).toBe(true);
+  });
+  it('hard choices only come up when something really happened', () => {
+    const { people } = makePeople(11);
+    const ps = people.map((per, id) => ({ id, per, mode: 'camp', kid: false, alone: 0, hungry: false, health: 0, couple: -1 })) as unknown as Person[];
+    for (const p of ps) p.per.secret = '' as never;
+    const rel = () => 0;
+    const g = { people: ps, leader: ps[0], clock: { day: 5 }, stock: { stolen: 0, totalFood: 99, takeFood() {} }, story: { rel, secretKnown: new Set() }, ideas: { done: () => false }, camp: { hutOf: () => null }, families: { parents: {} }, era: 'camp', politics: { choices: [] } };
+    const M = new Meeting(g as never), hard = () => (M as unknown as { hard(): { title: string } | null }).hard();
+    expect(hard()).toBe(null);
+    ps[3].per.secret = 'hoarder' as never; g.stock.stolen = 5;
+    expect(hard()?.title).toBe('FOOD WENT MISSING');
   });
 });

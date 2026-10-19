@@ -24,6 +24,8 @@ import { Families } from './families';
 import { Animals } from './animals';
 import { Traditions } from './traditions';
 import { Politics } from './politics';
+import { Hands } from './hands';
+import { Meeting } from './meeting';
 import { Persona } from './persona';
 import { Building } from './buildings';
 import { mulberry32 } from '../world/noise';
@@ -58,6 +60,8 @@ export class Group {
   animals: Animals;
   traditions: Traditions;
   politics: Politics;
+  hands: Hands;
+  meeting: Meeting;
   /** how many came off the plane (everyone after them was born here) */
   crashN = 0;
   /** a build site you're helping with */
@@ -136,6 +140,8 @@ export class Group {
     this.animals = new Animals(this);
     this.traditions = new Traditions(this);
     this.politics = new Politics(this);
+    this.hands = new Hands(this);
+    this.meeting = new Meeting(this);
     // something from home in every pocket
     const rk = mulberry32(w.seed ^ 0x6b33), ks = [...KEEPSAKES].sort(() => rk() - 0.5);
     this.people.forEach((p, i) => { p.keeps = [ks[i % ks.length]]; });
@@ -187,6 +193,7 @@ export class Group {
     const L = this.leader; if (!L) return;
     if (this.scoutPick) { const p = this.scoutPick; this.scoutPick = null; this.scouting.send(p, x, z); return; }
     if (this.canoe.click(x, z)) return;
+    if (this.hands.click(x, z)) { this.helping = null; this.still = 0; return; }
     // clicking a build site: you pitch in
     const b = this.camp.queue.find(b => b.kind !== 'fence' && Math.hypot(b.x - x, b.z - z) < 3.5) ?? null;
     this.helping = b;
@@ -334,7 +341,7 @@ export class Group {
   update(dt: number) {
     const L = this.leader;
     if (this.slowT > 0) { this.slowT -= dt / Math.max(0.05, this.timeScale); if (this.slowT <= 0) this.focus = null; }
-    this.timeScale = this.slowT > 0 ? 0.3 : this.goals.opts.length ? 0.12 : 1;     // the morning plan waits for you
+    this.timeScale = this.hands.ring ? 0.35 : this.slowT > 0 ? 0.3 : this.goals.opts.length ? 0.12 : 1;     // slow motion for timing rings; the plan waits for you
     const night = this.clock.night > 0.5, rain = this.weather.rain;
     for (const p of this.people) { p.anim += dt; if (p.moodT > 0) p.moodT -= dt; if (p.poseT > 0 && (p.poseT -= dt) <= 0) p.poseO = null; }
     if (!L) { for (const p of this.people) p.pose = 'sleep'; this.story.update(dt); return; }
@@ -344,7 +351,7 @@ export class Group {
     if (L.actT > 0) { L.actT -= dt; L.pose = 'sleep'; }
     else if (this.canoe.riding(L)) L.torch = night;
     else {
-      const done = this.bodies.advance(L, this.bodies.speed(L) * 1.1, dt);
+      const done = this.bodies.advance(L, this.bodies.speed(L) * 1.1 * this.hands.pace(), dt);
       L.pose = done ? 'idle' : L.hurt ? 'limp' : 'walk';
       L.torch = night;
       if (done && this.helping) this.help(L, this.helping, dt);
@@ -368,11 +375,13 @@ export class Group {
       if (p.hurt && !this.hurtSeen.has(p)) { this.hurtSeen.add(p); this.stats.hurt.push(p.per.name); } else if (!p.hurt) this.hurtSeen.delete(p);
       if (p.hurt && p.heal > 0 && p.mode === 'camp' && (p.heal -= dt * this.healRate(p)) <= 0) { p.hurt = false; this.story.toast(`${p.per.name} is back on their feet.`, 'good', p); }
     }
+    this.hands.update(dt);
     this.canoe.update(dt);
     this.crew.update(dt);
     this.scouting.update(dt);
     this.requests.update(dt);
     this.goals.update();
+    this.meeting.update();
     this.jobs.update(dt);
     this.health.update(dt);
     this.village.update(dt);
@@ -467,6 +476,7 @@ export class Group {
     if (p.act === 'huddle') { this.goals.drive(p, dt); return; }
     if (p.act === 'funeral') { this.health.drive(p, dt); return; }
     if (p.act === 'haul') { this.crew.unload(p, dt); return; }
+    if (p.alone) { this.alone(p, dt); return; }
     if (p.act === 'gather') { this.village.drive(p, dt); return; }
     if (p.sleepIn && h >= 10) p.sleepIn = false;
     if (p.job && this.jobs.on(p)) { if (p.act) { p.act = ''; p.partner = null; } this.jobs.drive(p, dt); return; }
@@ -549,12 +559,26 @@ export class Group {
     const par = p.kid ? this.families.parentFor(p) : null;
     if (par && par.job && this.jobs.on(par)) opts.push([4, () => { p.act = 'tag'; p.partner = par; p.actT = 20 + Math.random() * 20; }]);
     const rest = this.goals.active('rest');
-    if ((h > 11.5 && h < 14.5) || rest) opts.push([has(p.per, 'lazy') || rest ? 4 : 1, () => { p.act = 'nap'; p.actT = 15 + Math.random() * 15; const s = this.bed(p); goTo(s.x, s.z); }]);
+    if ((h > 11.5 && h < 14.5) || rest) opts.push([has(p.per, 'lazy') || rest ? 4 : this.meeting.dir === 'comfort' ? 2.5 : 1, () => { p.act = 'nap'; p.actT = 15 + Math.random() * 15; const s = this.bed(p); goTo(s.x, s.z); if (!rest) this.meeting.napped(p); }]);
     const bath = this.camp.get('bath');
     if (bath) opts.push([0.6, () => { p.act = 'nap'; p.actT = 10; goTo(bath.x + Math.random() * 2 - 1, bath.z + Math.random() * 2 - 1); S.mood(p, 'happy', 30); }]);
     let tot = 0; for (const o of opts) tot += o[0];
     let k = Math.random() * tot;
     for (const o of opts) if ((k -= o[0]) <= 0) { o[1](); break; }
+  }
+
+  /** Someone who walked out: a spot of their own at the edge of things, feeding themselves. */
+  private alone(p: Person, dt: number) {
+    const B_ = this.bodies, F = this.fire;
+    if (p.act !== 'alone') {
+      p.act = 'alone'; p.carry = 0; p.partner = null;
+      const a = (p.id * 2.4) % 6.28;
+      for (let r = 40; r > 20; r -= 4) { const q = this.grid.nearest(F.x + Math.cos(a) * r, F.z + Math.sin(a) * r); if (q && B_.go(p, q.x, q.z)) break; }
+      return;
+    }
+    if (p.path.length) { B_.advance(p, B_.speed(p), dt); p.pose = 'walk'; return; }
+    const h = this.clock.hour;
+    p.pose = h >= 21 || h < 6 ? 'sleep' : Math.sin(p.anim * 0.2) > 0.3 ? 'search' : 'sit';
   }
 
   /** Drop what they carried on the pile. A hoarder keeps some back. */
@@ -594,7 +618,7 @@ export class Group {
     if (this.camp.add('hut')) this.story.log('Everyone agreed on the first job: a roof over our heads.');
     for (const p of this.people) if (p.mode === 'camp' || p.mode === 'follow') { p.poseO = 'cheer'; p.poseT = 2; }
     this.onChime(true);
-    this.hint('era', 'The camp can build now. Pick a build in the morning plan, or say yes when someone suggests one. People gather what it needs on their own.');
+    this.hint('era', 'The camp can build now. Pick a build at the evening meeting, set the camp heading to BUILD, or say yes when someone suggests one. People gather what it needs on their own.');
   }
 
   /** The evening meal, rain in the catcher. */
@@ -604,7 +628,7 @@ export class Group {
     if (rain > 0.5 && this.camp.has('rainCatcher') && (this.rainT -= dt) <= 0) { this.rainT = this.camp.has('kiln') ? 12 : 25; st.add('water', 1); }
     if (h >= 20 && h < 22 && this.mealDay !== this.clock.day) {
       this.mealDay = this.clock.day; this.mealT = 45;
-      const eaters = this.people.filter(p => !(p.mode === 'scout' || p.mode === 'lost' || p.mode === 'hurt' || p.mode === 'dead'));
+      const eaters = this.people.filter(p => !(p.mode === 'scout' || p.mode === 'lost' || p.mode === 'hurt' || p.mode === 'dead' || p.alone));
       // a cooking spot with someone cooking stretches the food and lifts everyone
       const cooked = this.camp.has('cooking') && this.jobs.cooked; this.jobs.cooked = false;
       const short = st.meal(Math.ceil(eaters.length * (cooked ? 0.8 : 1) * (this.camp.has('kiln') ? 0.85 : 1)));
@@ -615,6 +639,7 @@ export class Group {
       // the kids eat first; adults go without before they do
       const order = eaters.filter(p => p !== this.leader).sort(() => Math.random() - 0.5).sort((a, b) => (a.kid ? 1 : 0) - (b.kid ? 1 : 0));
       for (let i = 0; i < Math.min(short, eaters.length); i++) (order[i] ?? this.leader!).hungry = true;
+      for (const p of eaters) if (p.cut > this.clock.day) p.hungry = true;      // their share was cut
       if (short > 0) {
         const all = short >= eaters.length;
         S.toast(all ? 'There was nothing to eat tonight.' : `${short} of us went to bed hungry.`, 'bad');
@@ -706,6 +731,8 @@ export class Group {
     this.traditions.dawn();
     this.politics.dawn();
     this.village.dawn();
+    this.hands.dawn();
+    this.meeting.dawn();
     if (this.cat.wounded > 0) this.cat.wounded--;
     const wear = this.bodies.wear; for (let i = 0; i < wear.length; i++) wear[i] *= 0.93;
     if (C.has('fishTrap')) st.add('fish', 3);

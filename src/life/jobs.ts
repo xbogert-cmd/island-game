@@ -3,6 +3,7 @@ import { has, Skill } from './persona';
 import { Person, Pose, Pt } from './people';
 import { Mat, MATS, TOOLS, TOOL_COST, Tool } from './stock';
 import { Building } from './buildings';
+import { dirBonus } from './meeting';
 import type { Group } from './group';
 
 export type JobKind = 'water' | 'food' | 'fish' | 'hunt' | 'trap' | 'wood' | 'bamboo' | 'stone' | 'vines' | 'scrap' | 'build' | 'craft' | 'cook' | 'watch' | 'tend' | 'experiment' | 'farm' | 'herbs' | 'lookout';
@@ -147,6 +148,7 @@ export class Jobs {
     for (const k of JOB_KINDS) {
       let w = vis.includes(k) ? this.demand(k) : 0;
       if (vis.includes(k) && plan && ((plan.kind === 'food' && (k === 'food' || k === 'fish')) || (plan.kind === 'water' && k === 'water') || (plan.kind === 'build' && ((k === 'build' && g.camp.target()) || g.camp.need()[k as Mat] > 0)))) w += 2;
+      if (vis.includes(k) && (w > 0 || g.meeting.dir === 'defend' || g.meeting.dir === 'food')) w = Math.max(0, w + dirBonus(g.meeting.dir, k, g.camp.need()[k as Mat] > 0));
       if (vis.includes(k)) w = this.prio[k] === 2 ? Math.max(2, Math.ceil(w * 1.5) + 1) : this.prio[k] === 0 ? Math.floor(w * 0.5) : w;
       this.want[k] = w;
     }
@@ -178,13 +180,13 @@ export class Jobs {
 
   available(p: Person) {
     const g = this.g;
-    return p !== g.leader && p.mode === 'camp' && !p.hurt && p.health < 2 && p.act !== 'ask' && p.act !== 'job' && p.act !== 'huddle' && p.act !== 'funeral' && p.act !== 'haul' && p.act !== 'gather' && !p.kid && !p.sleepIn && !g.requests.busy(p);
+    return p !== g.leader && p.mode === 'camp' && !p.alone && !p.hurt && p.health < 2 && p.act !== 'ask' && p.act !== 'job' && p.act !== 'huddle' && p.act !== 'funeral' && p.act !== 'haul' && p.act !== 'gather' && !p.kid && !p.sleepIn && !g.requests.busy(p);
   }
 
   private score(p: Person, k: JobKind, crew: Person[]) {
     const S = this.g.story;
     let s = (p.job === k ? 3 : 0) + (JOB[k].skill && p.per.skill === JOB[k].skill ? 4 : 0) + level(p.xp[k] ?? 0) * 0.8;
-    if (p.love === k) s += 1.5; if (p.hate === k) s -= 2;
+    if (p.love === k) s += 1.5; if (p.hate === k) s -= this.g.meeting.promises.some(x => x.id === p.id && x.kind === 'job') ? 100 : 2;
     // friends work together before rivals do
     for (const o of crew) { const r = S.rel(p, o); if (r > 30) s += 2.5; else if (r < -30) s -= 4; }
     if (k === 'watch') s += (has(p.per, 'brave') ? 1.5 : 0) + (p.per.strength === 'night owl' ? 2 : 0) - (p.per.weakness === 'afraid of the dark' ? 5 : 0);
@@ -203,6 +205,8 @@ export class Jobs {
   }
   quit(p: Person) { p.job = ''; p.wph = ''; p.carry = 0; p.bring = ''; p.torch = false; p.up = 0; }
 
+  /** Re-staff on the next tick (the camp's direction changed). */
+  nudge() { this.t = 0; }
   /** NORMAL → HIGH → LOW → NORMAL */
   cyclePrio(k: JobKind) { this.prio[k] = [1, 2, 0][this.prio[k]]; this.t = 0; }
 

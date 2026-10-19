@@ -21,6 +21,8 @@ export class CameraRig {
   follow: { x: number; z: number } | null = null;
   followOn = true;
   onResize = () => {};
+  /** a press the game wants for itself (aiming a spear): no camera drag */
+  grab: ((e: PointerEvent) => boolean) | null = null;
 
   constructor(private world: World, el: HTMLElement) {
     addEventListener('keydown', (e) => {
@@ -42,7 +44,7 @@ export class CameraRig {
       this.setZoom(this.zoomI + (acc > 0 ? -1 : 1));
       acc = 0; lock = now + 380;
     }, { passive: false });
-    el.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; this.drag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, on: false }; this.dragged = false; el.setPointerCapture(e.pointerId); });
+    el.addEventListener('pointerdown', (e) => { if (e.button !== 0 || this.grab?.(e)) return; this.drag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, on: false }; this.dragged = false; el.setPointerCapture(e.pointerId); });
     el.addEventListener('pointermove', (e) => {
       const d = this.drag; if (!d) return;
       if (!d.on && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 6) return;

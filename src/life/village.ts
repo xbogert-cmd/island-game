@@ -133,7 +133,7 @@ export class Village {
 
   gather(kind: string, at: Pt, r: number, end: number, steps: Gathering['steps'], onEnd?: () => void) {
     const g = this.g;
-    const crowd = g.people.filter(p => p.mode === 'camp' && p.health < 3 && p.act !== 'ask' && p.act !== 'funeral');
+    const crowd = g.people.filter(p => p.mode === 'camp' && !p.alone && p.health < 3 && p.act !== 'ask' && p.act !== 'funeral');
     crowd.forEach((p, i) => {
       const a = (i / crowd.length) * 6.283, q = g.grid.nearest(at.x + Math.cos(a) * r, at.z + Math.sin(a) * r) ?? at;
       if (p.job) g.jobs.quit(p);
@@ -174,7 +174,7 @@ export class Village {
   /** A storm is coming today or tomorrow, and we know it. */
   stormSoon() { return this.g.era === 'village' && this.warned && this.stormIn >= 0 && this.stormIn <= 1 && !this.prepared; }
 
-  /** The morning plan: tie everything down. */
+  /** The plan for the day: tie everything down. */
   prepare(who: Person) {
     const g = this.g, S = g.story;
     this.prepared = true;

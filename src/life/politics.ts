@@ -92,7 +92,7 @@ export class Politics {
   private answer(C: Person, reply: Reply) {
     const g = this.g, S = g.story, V = g.village, L = g.leader!, F = g.fire;
     S.say(L, reply === 'admit' ? "I've made mistakes. I'll own them. But I'm not done." : reply === 'remind' ? 'Remember where we started. Look at what we built.' : "You want to lead? Sit down.", 5);
-    const record = g.stats.found.length + g.camp.list.filter(b => b.progress >= 1).length * 0.5 + g.people.filter(p => p.savedBy === L.id).length * 4 + (g.chatter.legend ? 8 : 0);
+    const record = g.stats.found.length + g.camp.list.filter(b => b.progress >= 1).length * 0.5 + g.people.filter(p => p.savedBy === L.id).length * 4 + (g.chatter.legend ? 8 : 0) + g.hands.deeds.length * 3;
     // people walk to stand behind one of you
     const a = Math.atan2(C.z - F.z, C.x - F.x);
     let mine = 0, theirs = 0;

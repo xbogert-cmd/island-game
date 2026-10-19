@@ -53,6 +53,8 @@ export interface Person {
   born: number;
   /** who they're with (-1: nobody) */
   couple: number;
+  /** living away from camp until this day (0: no) / their share of food is cut until this day */
+  alone: number; cut: number;
   step: number;
 }
 
@@ -195,7 +197,7 @@ export class Survivors {
       path: [], repath: 0, stuck: 0, moving: false, act: '', actT: Math.random() * 3, ax: x, az: z, partner: null,
       poseO: null, poseT: 0, torch: false, carry: 0, hurt: false, heal: 0, mood: 'none', tmood: 'none', moodT: 0, why: '', apart: 0, apartHit: false, step: 0, ask: false, bring: '', hungry: false,
       job: '', wph: '', wT: 0, xp: {}, love: '', hate: '', pin: '', hateT: 0, sleepIn: false, watched: false, savedBy: -1, health: 0, hungerN: 0,
-      crew: false, outAt: -1e9, tripAt: 0, outLike: 0, tiredN: 0, haul: [], keeps: [], up: 0, kid: false, born: -1, couple: -1,
+      crew: false, outAt: -1e9, tripAt: 0, outLike: 0, tiredN: 0, haul: [], keeps: [], up: 0, kid: false, born: -1, couple: -1, alone: 0, cut: 0,
     };
     this.people.push(p);
     return p;

@@ -62,7 +62,12 @@ const HELP = `
 ${row('Click the ground', 'Walk there. Leave camp and your crew follows; come back and they go back to work.')}
 ${row('ALONE / CREW / ALL', 'Who comes when you leave camp. CREW is your picks, filled out by the camp in turns.')}
 ${row('Click a survivor', 'Their card: bring them next trip, send them scouting, find them.')}
+${row('Double-click the ground', 'Run. Fast, but it scares animals off.')}
+${row('Hold on an animal or fish', 'Draw your spear back (needs a spear from camp). Let go to throw: hold longer to throw farther and straighter. Esc cancels.')}
+${row('Timing rings', 'Click (or Space) when the closing ring is on the gold mark. Fights, climbs and caves are all rings.')}
 ${row('Click a build site', 'Pitch in yourself. Everyone works faster with you there.')}
+${row('Stand by someone working', 'You work beside them: the job goes faster and they learn quicker.')}
+${row('Click a <i class="ti ti-arrow-up" style="color:#f2d44a"></i> or a cave', 'Climb it (see half the island, find nests and crates) or go in with a torch.')}
 ${row('Click a message', 'Go to whoever it is about. CAMP takes you home.')}
 ${row('Click yourself', 'Your group waits here. Click again to call them.')}
 ${row('Right-click', 'Whistle: everyone with you comes running.')}
@@ -74,13 +79,13 @@ ${row('II  1x  2x  4x', 'Pause and game speed (Space pauses too).')}
 <h5>WHAT THE MARKS MEAN</h5>
 ${row('<i class="ti ti-alert-circle" style="color:var(--gold)"></i> over someone', 'They want to talk. Click them to answer, or ignore them and they decide alone.')}
 ${row('<span style="color:#ffd65a">?</span> in a yellow ring', 'A rumor. Walk into the ring to see if it is true. Some people lie.')}
-${row('<span style="color:#ff5a4a">!</span> in a red ring', 'Someone is lost or hurt out there. Go and find them.')}
+${row('<span style="color:#ff5a4a">!</span> in a red ring', 'Someone is lost or hurt out there. Go and find them: follow their tracks.')}
 ${row('Dotted trail', "A scout's path. Click it to follow them with the camera.")}
 ${row('Faces', '<i class="ti ti-mood-smile"></i> happy · <i class="ti ti-mood-angry"></i> angry · <i class="ti ti-mood-confuzed"></i> worried · <i class="ti ti-mood-sad"></i> sad or hungry · <i class="ti ti-mood-nervous"></i> scared · <i class="ti ti-zzz"></i> tired · <i class="ti ti-heart"></i> fond · <i class="ti ti-bandage"></i> hurt')}
 <h5>HOW THE DAY WORKS</h5>
-${row('Morning', 'Three people suggest a plan. Pick one; the camp works on it all day. Time slows while you choose.')}
-${row('Daytime', 'People gather food and water on their own, and come to you with ideas. Some ideas are bad: watch how they ask.')}
-${row('Evening', 'Everyone eats from the pile by the fire. Not enough food = hungry, unhappy people.')}
+${row('Daytime', 'The camp runs itself: jobs, building, gathering. You go out and do what only you can: hunt, climb, explore, find people. Some come to you with ideas; watch how they ask.')}
+${row('Evening meeting', 'Everyone meets at the fire: how the day went, then three plans for tomorrow. Pick one, and set where the camp is HEADING. Sometimes there is a hard choice to make.')}
+${row('Supper', 'Everyone eats from the pile by the fire. Not enough food = hungry, unhappy people.')}
 ${row('Night', 'Everyone sits at the fire and talks. Secrets slip out. Out in the dark, your group gets nervous.')}
 <h5>WORDS</h5>
 ${row('Trust', 'Loyal › Trusts you › Unsure › Doubts you › Against you')}
