@@ -1,6 +1,6 @@
 # Leader pass: the camp runs itself, you get your hands dirty
 
-**Status:** spec, waiting for review. Build after the user is back.
+**Status:** approved 2026-10-18 (controls, time and extras decided; see sections 2, 6 and 7).
 **Comes before:** Layer 5 (other people on the island, eruption, ending).
 
 ## Why
@@ -28,6 +28,19 @@ meeting and choices, not on job menus.
 - The JOBS page and manual assignment stay, for when you want to override something.
 
 ## 2. Hands-on actions (leader only)
+
+### Controls
+The mouse does what you press on:
+- **press on the ground:** walk, same as now;
+- **press and hold on an animal or fish:** stop and aim, with an arc showing the throw; release to throw;
+  Esc cancels. Out of range, clicking the animal walks you into range first;
+- **near a herd:** walking is a quiet sneak automatically; double-click the ground to run (fast, spooks them);
+- **during a timing ring:** click anywhere, or press Space;
+- right-click still whistles, and dragging still moves the camera.
+
+### Time
+Any hands-on action drops the game to 1x. Timing rings run in slight slow motion (about 0.5x) while
+they're up, then speed comes back.
 
 Two kinds of input, depending on the action:
 
@@ -119,6 +132,28 @@ against you later.
   need the sick bay.
 - You only die from repeated recklessness: getting hurt again while already badly hurt. Then the existing
   succession takes over.
+
+## 6. Extras for hunting
+
+- **Carry the kill home.** A deer or boar is heavy: the leader walks slower carrying it, or hands it to a
+  crew member. Bringing a big kill into camp gets a cheer and a little trust.
+- **Hides and trophies.** Hunted boar and deer leave a hide in stock. Hides make bedding: warmer huts,
+  and people sleep and recover better. Your first kill of each kind hangs as a trophy by the fire, and
+  people point it out in chatter.
+- **Teach someone.** Anyone in your crew while you spear fish, hunt or climb learns that skill. After
+  about three trips they can do it themselves: spear fishing and hunting improve their jobs, and
+  climbers fetch from climb spots.
+
+## 7. Deeds and the cat
+
+- **Your deeds become legend.** Big moments (a boar or deer kill, driving off the cat, a rescue, a climb
+  to a new top, a cave cleared) are written down as deeds. The storyteller tells them at the fire and at
+  meetings, and they count toward your record in a leadership challenge (the existing REMIND THEM WHAT
+  I DID answer).
+- **The cat stalks you.** When the cat is alive and you're out at night (torch or not), it sometimes
+  follows you: two eyes catch the light at the edge of the dark. Stay out long enough and it may
+  pounce, which starts a fight ring (section 2). A torch makes it keep its distance longer; your dog,
+  if you have one, warns you.
 
 ## Code shape
 
